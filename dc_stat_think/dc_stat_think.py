@@ -158,7 +158,7 @@ def draw_bs_pairs_linreg(x, y, size=1):
     for i in range(size):
         bs_inds = np.random.choice(inds, len(inds))
         bs_x, bs_y = x[bs_inds], y[bs_inds]
-        A = np.vstack([bs_x, np.ones(len(bs_x))]).transpose()
+        A = np.stack((bs_x, np.ones(len(bs_x)))).transpose()
         bs_slope_reps[i], bs_intercept_reps[i] = np.linalg.lstsq(A, bs_y)[0]
 
     return bs_slope_reps, bs_intercept_reps
@@ -182,13 +182,11 @@ def draw_bs_pairs(x, y, func, size=1):
     return bs_replicates
 
 
-@numba.jit(nopython=True)
 def permutation_sample(data_1, data_2):
     permuted_data = np.random.permutation(np.concatenate((data_1, data_2)))
     return permuted_data[:len(data_1)], permuted_data[len(data_1):]
 
 
-@numba.jit(nopython=True)
 def draw_perm_reps(d1, d2, func, size=1):
     return np.array([func(*permutation_sample(d1, d2)) for i in range(size)])
 
