@@ -3,7 +3,25 @@
 """Utilities for DataCamp's statistical thinking courses."""
 
 import numpy as np
+import numba
 
+@numba.jit(nopython=True)
+def ecdf_formal(x, data):
+    output = np.empty_like(x)
+
+    data = np.sort(data)
+
+    for i, x_val in enumerate(x):
+        j = 0
+        while j < len(data) and x_val >= data[j]:
+            j += 1
+
+        output[i] = j
+
+    return output / len(data)
+
+
+@numba.jit(nopython=True)
 def ecdf(data, formal=False, buff=0.1, min_x=None, max_x=None):
     """
     Generate `x` and `y` values for plotting an ECDF.
@@ -40,6 +58,7 @@ def ecdf(data, formal=False, buff=0.1, min_x=None, max_x=None):
         return _ecdf_dots(data)
 
 
+@numba.jit(nopython=True)
 def _ecdf_dots(data):
     """
     Compute `x` and `y` values for plotting an ECDF.
@@ -59,6 +78,7 @@ def _ecdf_dots(data):
     return np.sort(data), np.arange(1, len(data)+1) / len(data)
 
 
+@numba.jit(nopython=True)
 def _ecdf_formal(data, buff=0.1, min_x=None, max_x=None):
     """
     Generate `x` and `y` values for plotting a formal ECDF.
@@ -123,6 +143,7 @@ def draw_bs_reps(data, func, size=1):
     return np.array([bootstrap_replicate_1d(data, func) for _ in range(size)])
 
 
+@numba.jit(nopython=True)
 def draw_bs_pairs_linreg(x, y, size=1):
     """Perform pairs bootstrap for linear regression."""
 
@@ -137,7 +158,8 @@ def draw_bs_pairs_linreg(x, y, size=1):
     for i in range(size):
         bs_inds = np.random.choice(inds, len(inds))
         bs_x, bs_y = x[bs_inds], y[bs_inds]
-        bs_slope_reps[i], bs_intercept_reps[i] = np.polyfit(bs_x, bs_y, 1)
+        A = np.vstack([bs_x, np.ones(len(bs_x))]).transpose()
+        bs_slope_reps[i], bs_intercept_reps[i] = np.linalg.lstsq(A, bs_y)[0]
 
     return bs_slope_reps, bs_intercept_reps
 
@@ -160,15 +182,18 @@ def draw_bs_pairs(x, y, func, size=1):
     return bs_replicates
 
 
+@numba.jit(nopython=True)
 def permutation_sample(data_1, data_2):
     permuted_data = np.random.permutation(np.concatenate((data_1, data_2)))
     return permuted_data[:len(data_1)], permuted_data[len(data_1):]
 
 
+@numba.jit(nopython=True)
 def draw_perm_reps(d1, d2, func, size=1):
     return np.array([func(*permutation_sample(d1, d2)) for i in range(size)])
 
 
+@numba.jit(nopython=True)
 def diff_of_means(data_1, data_2):
     """Difference in means of two arrays."""
     return np.mean(data_1) - np.mean(data_2)
@@ -176,3 +201,71 @@ def diff_of_means(data_1, data_2):
 
 def pearson_r(data_1, data_2):
     return np.corrcoef(data_1, data_2)[0,1]
+
+
+@numba.jit(nopython=True)
+def ks_stat(data1, data2):
+    # Compute ECDF from data
+    x, y = ecdf(data1)
+
+    # Compute corresponding values of the target CDF
+    cdf = ecdf_formal(x, data2)
+
+    # Compute distances between convex corners and CDF
+    D_top = y - cdf
+
+    # Compute distance between concave corners and CDF
+    D_bottom = cdf - y + 1/len(data1)
+
+    return np.max(np.concatenate((D_top, D_bottom)))
+
+
+def draw_ks_reps(n, f, args=(), size=10000, n_reps=10000):
+
+    if f == np.random.exponential:
+        return _draw_ks_reps_exp(n, args[0], size, n_reps)
+
+    if f == np.random.normal:
+        return _draw_ks_reps_norm(n, args[0], args[1], size, n_reps)
+
+    # Generate samples from target distribution
+    x_f = f(*args, size=size)
+
+    # Initialize K-S replicates
+    reps = np.empty(n_reps)
+
+    # Draw replicates
+    for i in range(n_reps):
+        x_samp = f(*args, size=n)
+        reps[i] = ks_stat(x_samp, x_f)
+    return reps
+
+
+@numba.jit(nopython=True)
+def _draw_ks_reps_exp(n, x_mean, size, n_reps):
+    # Generate samples from target distribution
+    x_f = np.random.exponential(x_mean, size=size)
+
+    # Initialize K-S replicates
+    reps = np.empty(n_reps)
+
+    # Draw replicates
+    for i in range(n_reps):
+        x_samp = np.random.exponential(x_mean, size=n)
+        reps[i] = ks_stat(x_samp, x_f)
+    return reps
+
+
+@numba.jit(nopython=True)
+def _draw_ks_reps_norm(n, x_mean, x_std, size, n_reps):
+    # Generate samples from target distribution
+    x_f = np.random.normal(x_mean, x_std, size=size)
+
+    # Initialize K-S replicates
+    reps = np.empty(n_reps)
+
+    # Draw replicates
+    for i in range(n_reps):
+        x_samp = np.random.normal(x_mean, x_std, size=n)
+        reps[i] = ks_stat(x_samp, x_f)
+    return reps
