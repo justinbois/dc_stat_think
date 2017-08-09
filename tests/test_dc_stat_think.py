@@ -30,9 +30,10 @@ def test_ecdf_formal():
     assert np.isnan(result[0])
     assert result[1] == 1.0
 
+
 def test_pearson_r():
     for _ in range(100):
-        for n in range(1, 10):
+        for n in range(2, 10):
             x = np.random.random(n)
             y = np.random.random(n)
             assert np.isclose(dcst.pearson_r(x, y), np.corrcoef(x, y)[0,1])

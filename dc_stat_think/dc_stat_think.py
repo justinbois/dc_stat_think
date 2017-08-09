@@ -16,7 +16,7 @@ def ecdf_formal(x, data):
     x : int, float, or array_like
         Positions at which the formal ECDF is to be evaluated.
     data : array_like
-        Data set to use to generate the ECDF.
+        One-dimensional array of data to use to generate the ECDF.
 
     Returns
     -------
@@ -75,7 +75,6 @@ def _ecdf_formal(x, data):
     return output / len(data)
 
 
-@numba.jit(nopython=True)
 def ecdf(data, formal=False, buff=0.1, min_x=None, max_x=None):
     """
     Generate `x` and `y` values for plotting an ECDF.
@@ -83,7 +82,7 @@ def ecdf(data, formal=False, buff=0.1, min_x=None, max_x=None):
     Parameters
     ----------
     data : array_like
-        Array of data to be plotted as an ECDF.
+        One-dimensional array of data to be plotted as an ECDF.
     formal : bool, default False
         If True, generate `x` and `y` values for formal ECDF.
         Otherwise, generate `x` and `y` values for "dot" style ECDF.
@@ -131,7 +130,7 @@ def _ecdf_dots(data):
     Parameters
     ----------
     data : array_like
-        Array of data to be plotted as an ECDF.
+        One-dimensional array of data to be plotted as an ECDF.
 
     Returns
     -------
@@ -151,7 +150,7 @@ def _ecdf_formal_for_plotting(data, buff=0.1, min_x=None, max_x=None):
     Parameters
     ----------
     data : array_like
-        Array of data to be plotted as an ECDF.
+        One-dimensional array of data to be plotted as an ECDF.
     buff : float, default 0.1
         How long the tails at y = 0 and y = 1 should extend as a fraction
         of the total range of the data.
@@ -202,7 +201,7 @@ def bootstrap_replicate_1d(data, func, args=()):
     Parameters
     ----------
     data : array_like
-        1D array of data.
+        One-dimensional array of data.
     func : function
         Function, with call signature `func(data, *args)` to compute
         replicate statistic from resampled `data`.
@@ -229,7 +228,7 @@ def draw_bs_reps(data, func, args=(), size=1):
     Parameters
     ----------
     data : array_like
-        1D array of data.
+        One-dimensional array of data.
     func : function
         Function, with call signature `func(data, *args)` to compute
         replicate statistic from resampled `data`.
@@ -411,9 +410,10 @@ def permutation_sample(data_1, data_2):
 
     Parameters
     ----------
-    data_1 : ndarray
-        First data set.
-    data_2 : Second data set.
+    data_1 : array_like
+        One-dimensional array of data.
+    data_2 : array_like
+        One-dimensional array of data.
 
     Returns
     -------
@@ -439,9 +439,10 @@ def _permutation_sample(data_1, data_2):
 
     Parameters
     ----------
-    data_1 : ndarray
-        First data set.
-    data_2 : Second data set.
+    data_1 : array_like
+        One-dimensional array of data.
+    data_2 : array_like
+        One-dimensional array of data.
 
     Returns
     -------
@@ -463,9 +464,9 @@ def draw_perm_reps(data_1, data_2, func, size=1):
     Parameters
     ----------
     data_1 : array_like
-        First data set from which to generate reps.
+        One-dimensional array of data.
     data_2 : array_like
-        Second data set from which to generate reps.
+        One-dimensional array of data.
     func : function
         Function, with call signature `func(x, y, *args)` to compute
         replicate statistic from permutation sample. It must return
@@ -503,7 +504,21 @@ def draw_perm_reps(data_1, data_2, func, size=1):
 
 
 def diff_of_means(data_1, data_2):
-    """Difference in means of two arrays."""
+    """
+    Difference in means of two arrays.
+
+    Parameters
+    ----------
+    data_1 : array_like
+        One-dimensional array of data.
+    data_2 : array_like
+        One-dimensional array of data.
+
+    Returns
+    -------
+    output : float
+        np.mean(data_1) - np.mean(data_2)
+    """
     return np.mean(data_1) - np.mean(data_2)
 
 
@@ -527,7 +542,7 @@ def pearson_r(data_1, data_2):
     x, y = _convert_two_data(data_1, data_2)
 
     if len(x) == 1:
-        return 1.0
+        return np.nan
 
     return _pearson_r(x, y)
 
@@ -553,13 +568,53 @@ def _pearson_r(x, y):
     return (np.mean(x*y) - np.mean(x) * np.mean(y)) / np.std(x) / np.std(y)
 
 
+def ks_stat(data_1, data_2):
+    """
+    Compute the 2-sample Kolmogorov-Smirnov statistic.
+
+    Parameters
+    ----------
+    data_1 : ndarray
+        One-dimensional array of data.
+    data_2 : ndarray
+        One-dimensional array of data.
+
+    Returns
+    -------
+    output : float
+        Two-sample Kolmogorov-Smirnov statistic.
+    """
+    data_1 = _convert_data(data_1)
+    data_2 = _convert_data(data_2)
+
+    # Sort data_2, necessary for using Numba'd _ecdf_formal
+    data_2 = np.sort(data_2)
+
+    return _ks_stat(data_1, data_2)
+
+
 @numba.jit(nopython=True)
-def ks_stat(data1, data2):
+def _ks_stat(data1, data2):
+    """
+    Compute the 2-sample Kolmogorov-Smirnov statistic.
+
+    Parameters
+    ----------
+    data_1 : ndarray
+        One-dimensional array of data.
+    data_2 : ndarray
+        One-dimensional array of data. *Must be sorted.*
+
+    Returns
+    -------
+    output : float
+        Two-sample Kolmogorov-Smirnov statistic.
+    """
     # Compute ECDF from data
-    x, y = ecdf(data1)
+    x, y = _ecdf_dots(data1)
 
     # Compute corresponding values of the target CDF
-    cdf = ecdf_formal(x, data2)
+    cdf = _ecdf_formal(x, data2)
 
     # Compute distances between convex corners and CDF
     D_top = y - cdf
@@ -570,55 +625,48 @@ def ks_stat(data1, data2):
     return np.max(np.concatenate((D_top, D_bottom)))
 
 
-def draw_ks_reps(n, f, args=(), size=10000, n_reps=10000):
+def draw_ks_reps(n, func, args=(), size=10000, n_reps=1):
+    """
+    Draw Kolmogorov-Smirnov replicates.
 
-    if f == np.random.exponential:
-        return _draw_ks_reps_exp(n, args[0], size, n_reps)
+    Parameters
+    ----------
+    n : int
+        Size of experimental sample.
+    func : function
+        Function with call signature `func(*args, size=1)` that
+        generates random number drawn from target distribution.
+    args : tuple, default ()
+        Arguments to be passed to `func`.
+    size : int, default 10000
+        Number of random numbers to draw from target distribution
+        to approximate its analytical distribution.
+    n_reps : int, default 1
+        Number of pairs Kolmogorov-Smirnov replicates to draw.
 
-    if f == np.random.normal:
-        return _draw_ks_reps_norm(n, args[0], args[1], size, n_reps)
+    Returns
+    -------
+    output : ndarray
+        Array of Kolmogorov-Smirnov replicates.
+    """
+    f = _make_rng_numba_func(func)
 
-    # Generate samples from target distribution
-    x_f = f(*args, size=size)
+    @numba.jit
+    def _draw_ks_reps(n):
+        # Generate samples from target distribution
+        x_f = np.sort(f(*args, size=size))
 
-    # Initialize K-S replicates
-    reps = np.empty(n_reps)
+        # Initialize K-S replicates
+        reps = np.empty(n_reps)
 
-    # Draw replicates
-    for i in range(n_reps):
-        x_samp = f(*args, size=n)
-        reps[i] = ks_stat(x_samp, x_f)
-    return reps
+        # Draw replicates
+        for i in range(n_reps):
+            x_samp = f(*args, size=n)
+            reps[i] = _ks_stat(x_samp, x_f)
 
+        return reps
 
-@numba.jit(nopython=True)
-def _draw_ks_reps_exp(n, x_mean, size, n_reps):
-    # Generate samples from target distribution
-    x_f = np.random.exponential(x_mean, size=size)
-
-    # Initialize K-S replicates
-    reps = np.empty(n_reps)
-
-    # Draw replicates
-    for i in range(n_reps):
-        x_samp = np.random.exponential(x_mean, size=n)
-        reps[i] = ks_stat(x_samp, x_f)
-    return reps
-
-
-@numba.jit(nopython=True)
-def _draw_ks_reps_norm(n, x_mean, x_std, size, n_reps):
-    # Generate samples from target distribution
-    x_f = np.random.normal(x_mean, x_std, size=size)
-
-    # Initialize K-S replicates
-    reps = np.empty(n_reps)
-
-    # Draw replicates
-    for i in range(n_reps):
-        x_samp = np.random.normal(x_mean, x_std, size=n)
-        reps[i] = ks_stat(x_samp, x_f)
-    return reps
+    return _draw_ks_reps(n)
 
 
 def _convert_data(data):
@@ -639,10 +687,16 @@ def _convert_data(data):
     # If it's scalar, convert to array
     if np.isscalar(data):
         return np.array([data], dtype=np.float)
-    else:
-        # Convert data to sorted NumPy array with no nan's
-        data = np.array(data, dtype=np.float)
-        return data[~np.isnan(data)]
+
+    # Convert data to sorted NumPy array with no nan's
+    data = np.array(data, dtype=np.float)
+
+    # Make sure they are 1D arrays
+    if len(data.shape) != 1:
+        raise RuntimeError('`data` must be a 1D array.')
+
+    return data[~np.isnan(data)]
+
 
 def _convert_two_data(x, y):
     """
@@ -671,6 +725,10 @@ def _convert_two_data(x, y):
     x = np.array(x, dtype=float)
     y = np.array(y, dtype=float)
 
+    # Make sure they are 1D arrays
+    if len(x.shape) != 1 or len(y.shape) != 1:
+        raise RuntimeError('`x` and `y` must be 1D arrays.')
+
     # Must be the same length
     if len(x) != len(y):
         raise RuntimeError('`x` and `y` must be 1D arrays of the same length.')
@@ -686,6 +744,25 @@ def _convert_two_data(x, y):
 
 
 def _make_one_arg_numba_func(func):
+    """
+    Make a Numba'd version of a function that takes one positional
+    argument.
+
+    Parameters
+    ----------
+    func : function
+        Function with call signature `func(x, *args)`.
+
+    Returns
+    -------
+    output : Numba'd function
+        A Numba'd version of the functon
+
+    Notes
+    -----
+    .. If the function is Numba'able in nopython mode, it will compile
+       in that way. Otherwise, falls back to object mode.
+    """
     @numba.jit
     def f(x, args=()):
         return func(x, *args)
@@ -693,7 +770,66 @@ def _make_one_arg_numba_func(func):
 
 
 def _make_two_arg_numba_func(func):
+    """
+    Make a Numba'd version of a function that takes two positional
+    arguments.
+
+    Parameters
+    ----------
+    func : function
+        Function with call signature `func(x, y, *args)`.
+
+    Returns
+    -------
+    output : Numba'd function
+        A Numba'd version of the functon
+
+    Notes
+    -----
+    .. If the function is Numba'able in nopython mode, it will compile
+       in that way. Otherwise, falls back to object mode.
+    """
     @numba.jit
     def f(x, y, args=()):
         return func(x, y, *args)
     return f
+
+def _make_rng_numba_func(func):
+    """
+    Make a Numba'd version of a function to draw random numbers.
+
+    Parameters
+    ----------
+    func : function
+        Function with call signature `func(*args, size=1)`.
+
+    Returns
+    -------
+    output : Numba'd function
+        A Numba'd version of the functon
+
+    Notes
+    -----
+    .. If the function is Numba'able in nopython mode, it will compile
+       in that way. Otherwise, falls back to object mode.
+    """
+    @numba.jit
+    def f(args, size=1):
+        return func(*args, size=size)
+    return f
+
+@numba.jit(nopython=True)
+def seed_numba(seed):
+    """
+    Seed the random number generator for Numba'd functions.
+
+    Parameters
+    ----------
+    seed : int
+        Seed of the RNG.
+
+    Returns
+    -------
+    None
+    """
+    np.random.seed(seed)
