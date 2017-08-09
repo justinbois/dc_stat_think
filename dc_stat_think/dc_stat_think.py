@@ -5,18 +5,72 @@
 import numpy as np
 import numba
 
-@numba.jit(nopython=True)
+
 def ecdf_formal(x, data):
+    """
+    Compute the values of the formal ECDF generated from `data` at x.
+    I.e., if F is the ECDF, return F(x).
+
+    Parameters
+    ----------
+    x : int, float, or array_like
+        Positions at which the formal ECDF is to be evaluated.
+    data : array_like
+        Data set to use to generate the ECDF.
+
+    Returns
+    -------
+    output : float or ndarray
+        Value of the ECDF at `x`.
+    """
+    # Convert x to array
+    if np.isscalar(x):
+        x = np.array([x], dtype=np.float)
+        return_scalar = True
+    else:
+        x = np.array(x, dtype=np.float)
+        return_scalar = False
+
+    # Convert data to sorted NumPy array with no nan's
+    data = _convert_data(data)
+
+    # Compute formal ECDF value
+    out = _ecdf_formal(x, np.sort(data))
+
+    if return_scalar:
+        return out[0]
+    return out
+
+
+@numba.jit(nopython=True)
+def _ecdf_formal(x, data):
+    """
+    Compute the values of the formal ECDF generated from `data` at x.
+    I.e., if F is the ECDF, return F(x).
+
+    Parameters
+    ----------
+    x : array_like
+        Positions at which the formal ECDF is to be evaluated.
+    data : array_like
+        *Sorted* data set to use to generate the ECDF.
+
+    Returns
+    -------
+    output : float or ndarray
+        Value of the ECDF at `x`.
+    """
     output = np.empty_like(x)
 
-    data = np.sort(data)
-
     for i, x_val in enumerate(x):
-        j = 0
-        while j < len(data) and x_val >= data[j]:
-            j += 1
+        if np.isnan(x_val):
+            output[i] = np.nan
+        else:
+            j = 0
+            while j < len(data) and x_val >= data[j]:
+                j += 1
 
-        output[i] = j
+            output[i] = j
 
     return output / len(data)
 
@@ -50,10 +104,21 @@ def ecdf(data, formal=False, buff=0.1, min_x=None, max_x=None):
         `x` values for plotting
     y : array
         `y` values for plotting
+
+    Notes
+    -----
+    .. nan entries in `data` are ignored.
     """
 
+    if formal and buff is None and (min_x is None or max_x is None):
+        raise RunetimeError(
+                    'If `buff` is None, `min_x` and `max_x` must be specified.')
+
+    data = _convert_data(data)
+
     if formal:
-        return _ecdf_formal(data, buff=buff, min_x=min_x, max_x=max_x)
+        return _ecdf_formal_for_plotting(data, buff=buff, min_x=min_x,
+                                         max_x=max_x)
     else:
         return _ecdf_dots(data)
 
@@ -79,7 +144,7 @@ def _ecdf_dots(data):
 
 
 @numba.jit(nopython=True)
-def _ecdf_formal(data, buff=0.1, min_x=None, max_x=None):
+def _ecdf_formal_for_plotting(data, buff=0.1, min_x=None, max_x=None):
     """
     Generate `x` and `y` values for plotting a formal ECDF.
 
@@ -130,22 +195,145 @@ def _ecdf_formal(data, buff=0.1, min_x=None, max_x=None):
     return x_formal, y_formal
 
 
-def eccdf(data):
-    """Generate x and y values for plotting an ECCDF."""
-    return np.sort(data), np.arange(len(data), 0, -1) / len(data)
+def bootstrap_replicate_1d(data, func, args=()):
+    """
+    Generate a bootstrap replicate out of `data` using `func`.
 
+    Parameters
+    ----------
+    data : array_like
+        1D array of data.
+    func : function
+        Function, with call signature `func(data, *args)` to compute
+        replicate statistic from resampled `data`.
+    args : tuple, default ()
+        Arguments to be passed to `func`.
 
-def bootstrap_replicate_1d(data, func):
+    Returns
+    -------
+    output : float
+        A bootstrap replicate computed from `data` using `func`.
+
+    Notes
+    -----
+    .. nan values are ignored.
+    """
+    data = _convert_data(data)
     return func(np.random.choice(data, size=len(data)))
 
 
-def draw_bs_reps(data, func, size=1):
-    return np.array([bootstrap_replicate_1d(data, func) for _ in range(size)])
+def draw_bs_reps(data, func, args=(), size=1):
+    """
+    Generate bootstrap replicates out of `data` using `func`.
+
+    Parameters
+    ----------
+    data : array_like
+        1D array of data.
+    func : function
+        Function, with call signature `func(data, *args)` to compute
+        replicate statistic from resampled `data`.
+    args : tuple, default ()
+        Arguments to be passed to `func`.
+    size : int, default 1
+        Number of bootstrap replicates to generate.
+
+    Returns
+    -------
+    output : float
+        A bootstrap replicate computed from `data` using `func`.
+
+    Notes
+    -----
+    .. nan values are ignored.
+    """
+
+    data = _convert_data(data)
+
+    # Make Numba'd function
+    f = _make_one_arg_numba_func(func)
+
+    @numba.jit
+    def _draw_bs_reps(data):
+        # Set up output array
+        bs_reps = np.empty(size)
+
+        # Draw replicates
+        n = len(data)
+        for i in range(size):
+            bs_reps[i] = f(np.random.choice(data, size=n), args)
+
+        return bs_reps
+
+    return _draw_bs_reps(data)
+
+
+def draw_bs_pairs_linreg(x, y, size=1):
+    """
+    Perform pairs bootstrap for linear regression.
+
+    Parameters
+    ----------
+    x : array_like
+        x-values of data.
+    y : array_like
+        y-values of data.
+    size : int, default 1
+        Number of pairs bootstrap replicates to draw.
+
+    Returns
+    -------
+    slope_reps : ndarray
+        Pairs bootstrap replicates of the slope.
+    intercept_reps : ndarray
+        Pairs bootstrap replicates of the intercept.
+
+    Notes
+    -----
+    .. Entries where either `x` or `y` has a nan are ignored.
+    """
+    # Make sure they are array-like
+    if np.isscalar(x) or np.isscalar(y):
+        raise RuntimeError('`x` and `y` must be 1D arrays of the same length.')
+
+    # Convert to Numpy arrays
+    x = np.array(x, dtype=float)
+    y = np.array(y, dtype=float)
+
+    # Must be the same length
+    if len(x) != len(y):
+        raise RuntimeError('`x` and `y` must be 1D arrays of the same length.')
+
+    # Clean out nans
+    inds = ~np.logical_and(np.isnan(x), np.isnan(y))
+    x = x[inds]
+    y = y[inds]
+
+    return _draw_bs_pairs_linreg(x, y, size=size)
 
 
 @numba.jit(nopython=True)
-def draw_bs_pairs_linreg(x, y, size=1):
-    """Perform pairs bootstrap for linear regression."""
+def _draw_bs_pairs_linreg(x, y, size=1):
+    """
+    Perform pairs bootstrap for linear regression.
+
+    Parameters
+    ----------
+    x : array_like
+        x-values of data.
+    y : array_like
+        y-values of data.
+    size : int, default 1
+        Number of pairs bootstrap replicates to draw.
+
+    Returns
+    -------
+    slope_reps : ndarray
+        Pairs bootstrap replicates of the slope.
+    intercept_reps : ndarray
+        Pairs bootstrap replicates of the intercept.
+    """
+    x, y = _convert_two_data(x, y)
 
     # Set up array of indices to sample from
     inds = np.arange(len(x))
@@ -164,41 +352,205 @@ def draw_bs_pairs_linreg(x, y, size=1):
     return bs_slope_reps, bs_intercept_reps
 
 
-def draw_bs_pairs(x, y, func, size=1):
-    """Perform pairs bootstrap for single statistic."""
+def draw_bs_pairs(x, y, func, args=(), size=1):
+    """
+    Perform pairs bootstrap for single statistic.
 
-    # Set up array of indices to sample from
-    inds = np.arange(len(x))
+    Parameters
+    ----------
+    x : array_like
+        x-values of data.
+    y : array_like
+        y-values of data.
+    func : function
+        Function, with call signature `func(x, y, *args)` to compute
+        replicate statistic from pairs bootstrap sample. It must return
+        a single, scalar value.
+    args : tuple, default ()
+        Arguments to be passed to `func`.
+    size : int, default 1
+        Number of pairs bootstrap replicates to draw.
 
-    # Initialize replicates
-    bs_replicates = np.empty(size)
+    Returns
+    -------
+    output : ndarray
+        Bootstrap replicates.
+    """
+    x, y = _convert_two_data(x, y)
 
-    # Generate replicates
-    for i in range(size):
-        bs_inds = np.random.choice(inds, len(inds))
-        bs_x, bs_y = x[bs_inds], y[bs_inds]
-        bs_replicates[i] = func(bs_x, bs_y)
+    # Make Numba'd function
+    f = _make_two_arg_numba_func(func)
 
-    return bs_replicates
+    n = len(x)
+
+    @numba.jit
+    def _draw_bs_pairs(x, y):
+        # Set up array of indices to sample from
+        inds = np.arange(n)
+
+        # Initialize replicates
+        bs_replicates = np.empty(size)
+
+        # Generate replicates
+        for i in range(size):
+            bs_inds = np.random.choice(inds, len(n))
+            bs_x, bs_y = x[bs_inds], y[bs_inds]
+            bs_replicates[i] = f(bs_x, bs_y, *args)
+
+        return bs_replicates
+
+    return _draw_bs_pairs(x, y)
 
 
 def permutation_sample(data_1, data_2):
-    permuted_data = np.random.permutation(np.concatenate((data_1, data_2)))
-    return permuted_data[:len(data_1)], permuted_data[len(data_1):]
+    """
+    Generate a permutation sample from two data sets. Specifically,
+    concatenate `data_1` and `data_2`, scramble the order of the
+    concatenated array, and then return the first len(data_1) entries
+    and the last len(data_2) entries.
 
+    Parameters
+    ----------
+    data_1 : ndarray
+        First data set.
+    data_2 : Second data set.
 
-def draw_perm_reps(d1, d2, func, size=1):
-    return np.array([func(*permutation_sample(d1, d2)) for i in range(size)])
+    Returns
+    -------
+    out_1 : ndarray, same shape as `data_1`
+        Permutation sample corresponding to `data_1`.
+    out_2 : ndarray, same shape as `data_2`
+        Permutation sample corresponding to `data_2`.
+    """
+
+    data_1 = _convert_data(data_1)
+    data_2 = _convert_data(data_2)
+
+    return _permtuation_sample(data_1, data_2)
 
 
 @numba.jit(nopython=True)
+def _permutation_sample(data_1, data_2):
+    """
+    Generate a permutation sample from two data sets. Specifically,
+    concatenate `data_1` and `data_2`, scramble the order of the
+    concatenated array, and then return the first len(data_1) entries
+    and the last len(data_2) entries.
+
+    Parameters
+    ----------
+    data_1 : ndarray
+        First data set.
+    data_2 : Second data set.
+
+    Returns
+    -------
+    out_1 : ndarray, same shape as `data_1`
+        Permutation sample corresponding to `data_1`.
+    out_2 : ndarray, same shape as `data_2`
+        Permutation sample corresponding to `data_2`.
+    """
+    x = np.concatenate((data_1, data_2))
+    np.random.shuffle(x)
+    return x[:len(data_1)], x[len(data_1):]
+
+
+def draw_perm_reps(data_1, data_2, func, size=1):
+    """
+    Generate permutation replicates of `func` from `data_1` and
+    `data_2`
+
+    Parameters
+    ----------
+    data_1 : array_like
+        First data set from which to generate reps.
+    data_2 : array_like
+        Second data set from which to generate reps.
+    func : function
+        Function, with call signature `func(x, y, *args)` to compute
+        replicate statistic from permutation sample. It must return
+        a single, scalar value.
+    args : tuple, default ()
+        Arguments to be passed to `func`.
+    size : int, default 1
+        Number of pairs bootstrap replicates to draw.
+
+    Returns
+    -------
+    output : ndarray
+        Permutation replicates.
+    """
+    # Convert to Numpy arrays
+    data_1 = _convert_data(data_1)
+    data_2 = _convert_data(data_2)
+
+    # Make a Numba'd function for drawing reps.
+    f = _make_two_arg_numba_func(func)
+
+    @numba.jit
+    def _draw_perm_reps(data_1, data_2):
+        n1 = len(data_1)
+        x = np.concatenate((data_1, data_2))
+
+        perm_reps = np.empty(size)
+        for i in range(size):
+            np.random.shuffle(x)
+            perm_reps[i] = f(x[:n1], x[n1:], *args)
+
+        return perm_reps
+
+    return _draw_perm_reps(data_1, data_2)
+
+
 def diff_of_means(data_1, data_2):
     """Difference in means of two arrays."""
     return np.mean(data_1) - np.mean(data_2)
 
 
 def pearson_r(data_1, data_2):
-    return np.corrcoef(data_1, data_2)[0,1]
+    """
+    Compute the Pearson correlation coefficient between two samples.
+
+    Parameters
+    ----------
+    data_1 : array_like
+        One-dimensional array of data.
+    data_2 : array_like
+        One-dimensional array of data.
+
+    Returns
+    -------
+    output : float
+        The Pearson correlation coefficient between `data_1`
+        and `data_2`.
+    """
+    x, y = _convert_two_data(data_1, data_2)
+
+    if len(x) == 1:
+        return 1.0
+
+    return _pearson_r(x, y)
+
+
+@numba.jit(nopython=True)
+def _pearson_r(x, y):
+    """
+    Compute the Pearson correlation coefficient between two samples.
+
+    Parameters
+    ----------
+    data_1 : array_like
+        One-dimensional array of data.
+    data_2 : array_like
+        One-dimensional array of data.
+
+    Returns
+    -------
+    output : float
+        The Pearson correlation coefficient between `data_1`
+        and `data_2`.
+    """
+    return (np.mean(x*y) - np.mean(x) * np.mean(y)) / np.std(x) / np.std(y)
 
 
 @numba.jit(nopython=True)
@@ -267,3 +619,81 @@ def _draw_ks_reps_norm(n, x_mean, x_std, size, n_reps):
         x_samp = np.random.normal(x_mean, x_std, size=n)
         reps[i] = ks_stat(x_samp, x_f)
     return reps
+
+
+def _convert_data(data):
+    """
+    Convert inputted 1D data set into NumPy array of floats.
+    All nan's are dropped.
+
+    Parameters
+    ----------
+    data : int, float, or array_like
+        Input data, to be converted.
+
+    Returns
+    -------
+    output : ndarray
+        `data` as a one-dimensional NumPy array, dtype float.
+    """
+    # If it's scalar, convert to array
+    if np.isscalar(data):
+        return np.array([data], dtype=np.float)
+    else:
+        # Convert data to sorted NumPy array with no nan's
+        data = np.array(data, dtype=np.float)
+        return data[~np.isnan(data)]
+
+def _convert_two_data(x, y):
+    """
+    Converted two inputted 1D data sets into Numpy arrays of floats.
+    Indices where one of the two arrays is nan are dropped.
+
+    Parameters
+    ----------
+    x : array_like
+        Input data, to be converted. `x` and `y` must have the same length.
+    y : array_like
+        Input data, to be converted. `x` and `y` must have the same length.
+
+    Returns
+    -------
+    x_out : ndarray
+        `x` as a one-dimensional NumPy array, dtype float.
+    y_out : ndarray
+        `y` as a one-dimensional NumPy array, dtype float.
+    """
+    # Make sure they are array-like
+    if np.isscalar(x) or np.isscalar(y):
+        raise RuntimeError('`x` and `y` must be 1D arrays of the same length.')
+
+    # Convert to Numpy arrays
+    x = np.array(x, dtype=float)
+    y = np.array(y, dtype=float)
+
+    # Must be the same length
+    if len(x) != len(y):
+        raise RuntimeError('`x` and `y` must be 1D arrays of the same length.')
+
+    # Must be nonempty
+    if len(x) == 0:
+        raise RuntimeError('`x` and `y` must be nonempty.')
+
+    # Clean out nans
+    inds = ~np.logical_and(np.isnan(x), np.isnan(y))
+
+    return x[inds], y[inds]
+
+
+def _make_one_arg_numba_func(func):
+    @numba.jit
+    def f(x, args=()):
+        return func(x, *args)
+    return f
+
+
+def _make_two_arg_numba_func(func):
+    @numba.jit
+    def f(x, y, args=()):
+        return func(x, y, *args)
+    return f
