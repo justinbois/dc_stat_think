@@ -504,7 +504,7 @@ def permutation_sample(data_1, data_2):
     data_1 = _convert_data(data_1)
     data_2 = _convert_data(data_2)
 
-    return _permtuation_sample(data_1, data_2)
+    return _permutation_sample(data_1, data_2)
 
 
 @numba.jit(nopython=True)
@@ -534,7 +534,7 @@ def _permutation_sample(data_1, data_2):
     return x[:len(data_1)], x[len(data_1):]
 
 
-def draw_perm_reps(data_1, data_2, func, size=1):
+def draw_perm_reps(data_1, data_2, func, args=(), size=1):
     """
     Generate permutation replicates of `func` from `data_1` and
     `data_2`
@@ -563,6 +563,13 @@ def draw_perm_reps(data_1, data_2, func, size=1):
     data_1 = _convert_data(data_1)
     data_2 = _convert_data(data_2)
 
+    if args == ():
+        if func == diff_of_means:
+            return _draw_perm_reps_diff_of_means(data_1, data_2, size=size)
+        elif func == studentized_diff_of_means:
+            return _draw_perm_reps_studentized_diff_of_means(data_1, data_2,
+                                                             size=size)
+
     # Make a Numba'd function for drawing reps.
     f = _make_two_arg_numba_func(func)
 
@@ -581,9 +588,11 @@ def draw_perm_reps(data_1, data_2, func, size=1):
     return _draw_perm_reps(data_1, data_2)
 
 
-def diff_of_means(data_1, data_2):
+@numba.jit(nopython=True)
+def _draw_perm_reps_diff_of_means(data_1, data_2, size=1):
     """
-    Difference in means of two arrays.
+    Generate permutation replicates of difference of means from
+    `data_1` and `data_2`
 
     Parameters
     ----------
@@ -591,13 +600,54 @@ def diff_of_means(data_1, data_2):
         One-dimensional array of data.
     data_2 : array_like
         One-dimensional array of data.
+    size : int, default 1
+        Number of pairs bootstrap replicates to draw.
 
     Returns
     -------
-    output : float
-        np.mean(data_1) - np.mean(data_2)
+    output : ndarray
+        Permutation replicates.
     """
-    return np.mean(data_1) - np.mean(data_2)
+    n1 = len(data_1)
+    x = np.concatenate((data_1, data_2))
+
+    perm_reps = np.empty(size)
+    for i in range(size):
+        np.random.shuffle(x)
+        perm_reps[i] = _diff_of_means(x[:n1], x[n1:])
+
+    return perm_reps
+
+
+@numba.jit(nopython=True)
+def _draw_perm_reps_studentized_diff_of_means(data_1, data_2, size=1):
+    """
+    Generate permutation replicates of Studentized difference
+    of means from  `data_1` and `data_2`
+
+    Parameters
+    ----------
+    data_1 : array_like
+        One-dimensional array of data.
+    data_2 : array_like
+        One-dimensional array of data.
+    size : int, default 1
+        Number of pairs bootstrap replicates to draw.
+
+    Returns
+    -------
+    output : ndarray
+        Permutation replicates.
+    """
+    n1 = len(data_1)
+    x = np.concatenate((data_1, data_2))
+
+    perm_reps = np.empty(size)
+    for i in range(size):
+        np.random.shuffle(x)
+        perm_reps[i] = _studentized_diff_of_means(x[:n1], x[n1:])
+
+    return perm_reps
 
 
 def diff_of_means(data_1, data_2):
@@ -815,40 +865,42 @@ def draw_ks_reps(n, func, args=(), size=10000, n_reps=1):
     output : ndarray
         Array of Kolmogorov-Smirnov replicates.
     """
-    f = _make_rng_numba_func(func)
+    if func == np.random.exponential:
+        return _draw_ks_reps_exponential(n, *args, size=size, n_reps=n_reps)
+    elif func == np.random.normal:
+        return _draw_ks_reps_normal(n, *args, size=size, n_reps=n_reps)
 
-    @numba.jit
-    def _draw_ks_reps(n):
-        # Generate samples from target distribution
-        x_f = np.sort(f(*args, size=size))
 
-        # Initialize K-S replicates
-        reps = np.empty(n_reps)
+    print('no numba')
 
-        # Draw replicates
-        for i in range(n_reps):
-            x_samp = f(*args, size=n)
-            reps[i] = _ks_stat(x_samp, x_f)
+    # Generate samples from target distribution
+    x_f = np.sort(func(*args, size=size))
 
-        return reps
+    # Initialize K-S replicates
+    reps = np.empty(n_reps)
 
-    return _draw_ks_reps(n)
+    # Draw replicates
+    for i in range(n_reps):
+        x_samp = func(*args, size=n)
+        reps[i] = _ks_stat(x_samp, x_f)
+
+    return reps
 
 
 @numba.jit(nopython=True)
-def draw_ks_reps_exponential(n, scale, size=10000, n_reps=1):
+def _draw_ks_reps_exponential(n, scale, size=10000, n_reps=1):
     """
-    Draw Kolmogorov-Smirnov replicates.
+    Draw Kolmogorov-Smirnov replicates from Exponential distribution.
 
     Parameters
     ----------
     n : int
         Size of experimental sample.
     scale : float
-
+        Scale parameter (mean) for Exponential distribution.
     size : int, default 10000
-        Number of random numbers to draw from target distribution
-        to approximate its analytical distribution.
+        Number of random numbers to draw from Exponential
+        distribution to approximate its analytical distribution.
     n_reps : int, default 1
         Number of pairs Kolmogorov-Smirnov replicates to draw.
 
@@ -857,24 +909,56 @@ def draw_ks_reps_exponential(n, scale, size=10000, n_reps=1):
     output : ndarray
         Array of Kolmogorov-Smirnov replicates.
     """
-    f = _make_rng_numba_func(func)
+    # Generate samples from target distribution
+    x_f = np.sort(np.random.exponential(scale, size=size))
 
-    @numba.jit
-    def _draw_ks_reps(n):
-        # Generate samples from target distribution
-        x_f = np.sort(f(*args, size=size))
+    # Initialize K-S replicates
+    reps = np.empty(n_reps)
 
-        # Initialize K-S replicates
-        reps = np.empty(n_reps)
+    # Draw replicates
+    for i in range(n_reps):
+        x_samp = np.random.exponential(scale, size=n)
+        reps[i] = _ks_stat(x_samp, x_f)
 
-        # Draw replicates
-        for i in range(n_reps):
-            x_samp = f(*args, size=n)
-            reps[i] = _ks_stat(x_samp, x_f)
+    return reps
 
-        return reps
 
-    return _draw_ks_reps(n)
+@numba.jit(nopython=True)
+def _draw_ks_reps_normal(n, mu, sigma, size=10000, n_reps=1):
+    """
+    Draw Kolmogorov-Smirnov replicates from Normal distribution.
+
+    Parameters
+    ----------
+    n : int
+        Size of experimental sample.
+    mu : float
+        Location parameter (mean) of Normal distribution.
+    sigma : float
+        Scale parameter (std) of Normal distribution.
+    size : int, default 10000
+        Number of random numbers to draw from Normal
+        distribution to approximate its analytical distribution.
+    n_reps : int, default 1
+        Number of pairs Kolmogorov-Smirnov replicates to draw.
+
+    Returns
+    -------
+    output : ndarray
+        Array of Kolmogorov-Smirnov replicates.
+    """
+    # Generate samples from target distribution
+    x_f = np.sort(np.random.normal(mu, sigma, size=size))
+
+    # Initialize K-S replicates
+    reps = np.empty(n_reps)
+
+    # Draw replicates
+    for i in range(n_reps):
+        x_samp = np.random.normal(mu, sigma, size=n)
+        reps[i] = _ks_stat(x_samp, x_f)
+
+    return reps
 
 
 def _convert_data(data):
@@ -1024,7 +1108,8 @@ def _make_rng_numba_func(func):
     """
     @numba.jit
     def f(args, size=1):
-        return func(*args, size=size)
+        all_args = args + (size,)
+        return func(*all_args)
     return f
 
 

@@ -6,6 +6,7 @@
 
 import numpy as np
 import pandas as pd
+import scipy.stats as st
 
 import pytest
 
@@ -50,6 +51,42 @@ def test_draw_bs_pairs_linreg():
     y = 5 + 2 * x
     slopes, intercepts = dcst.draw_bs_pairs_linreg(x, y, size=10)
     assert np.isclose(slopes, 2).all() and np.isclose(intercepts, 5).all()
+
+
+def test_permutation_sample():
+    data_1 = np.random.random(100)
+    data_2 = np.random.random(70)
+    perm_1, perm_2 = dcst.permutation_sample(data_1, data_2)
+    assert len(perm_1) == len(data_1) and len(data_2) == len(perm_2)
+    assert ~np.isclose(data_1, perm_1).all()
+    assert ~np.isclose(data_2, perm_2).all()
+    assert np.isclose(np.sort(np.concatenate((data_1, data_2))),
+                      np.sort(np.concatenate((perm_1, perm_2)))).all()
+
+
+def test_draw_perm_reps():
+    data_1 = np.ones(10)
+    data_2 = np.ones(10)
+    perm_reps = dcst.draw_perm_reps(data_1, data_2, dcst.diff_of_means,
+                                    size=100)
+    assert (perm_reps == np.zeros(100)).all()
+
+    def diff_of_medians(data_1, data_2):
+        return np.median(data_1) - np.median(data_2)
+    data_1 = np.ones(10)
+    data_2 = np.ones(10)
+    perm_reps = dcst.draw_perm_reps(data_1, data_2, diff_of_medians, size=100)
+    assert (perm_reps == np.zeros(100)).all()
+
+
+def test_ks_stat():
+    for n in range(3, 20):
+        for mu in np.linspace(-1, 1, 10):
+            for sigma in np.logspace(-1, 2, 10):
+                data_1 = np.random.normal(mu, sigma, size=n)
+                data_2 = np.random.normal(mu, sigma, size=1000)
+                correct, _ = st.ks_2samp(data_1, data_2)
+                assert np.isclose(dcst.ks_stat(data_1, data_2), correct)
 
 
 def test_pandas_conversion():
