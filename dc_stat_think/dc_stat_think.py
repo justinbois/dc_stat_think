@@ -108,7 +108,6 @@ def ecdf(data, formal=False, buff=0.1, min_x=None, max_x=None):
     -----
     .. nan entries in `data` are ignored.
     """
-
     if formal and buff is None and (min_x is None or max_x is None):
         raise RunetimeError(
                     'If `buff` is None, `min_x` and `max_x` must be specified.')
@@ -239,15 +238,22 @@ def draw_bs_reps(data, func, args=(), size=1):
 
     Returns
     -------
-    output : float
-        A bootstrap replicate computed from `data` using `func`.
+    output : ndarray
+        Bootstrap replicates computed from `data` using `func`.
 
     Notes
     -----
     .. nan values are ignored.
     """
-
     data = _convert_data(data)
+
+    if args == ():
+        if func == np.mean:
+            return _draw_bs_reps_mean(data, size=size)
+        elif func == np.median:
+            return _draw_bs_reps_median(data, size=size)
+        elif func == np.std:
+            return _draw_bs_reps_std(data, size=size)
 
     # Make Numba'd function
     f = _make_one_arg_numba_func(func)
@@ -265,6 +271,96 @@ def draw_bs_reps(data, func, args=(), size=1):
         return bs_reps
 
     return _draw_bs_reps(data)
+
+
+@numba.jit(nopython=True)
+def _draw_bs_reps_mean(data, size=1):
+    """
+    Generate bootstrap replicates of the mean out of `data`.
+
+    Parameters
+    ----------
+    data : array_like
+        One-dimensional array of data.
+    size : int, default 1
+        Number of bootstrap replicates to generate.
+
+    Returns
+    -------
+    output : float
+        Bootstrap replicates of the mean computed from `data`.
+    """
+    # Set up output array
+    bs_reps = np.empty(size)
+
+    # Draw replicates
+    n = len(data)
+    for i in range(size):
+        bs_reps[i] = np.mean(np.random.choice(data, size=n))
+
+    return bs_reps
+
+
+@numba.jit(nopython=True)
+def _draw_bs_reps_median(data, size=1):
+    """
+    Generate bootstrap replicates of the median out of `data`.
+
+    Parameters
+    ----------
+    data : array_like
+        One-dimensional array of data.
+    size : int, default 1
+        Number of bootstrap replicates to generate.
+
+    Returns
+    -------
+    output : float
+        Bootstrap replicates of the median computed from `data`.
+    """
+    # Set up output array
+    bs_reps = np.empty(size)
+
+    # Draw replicates
+    n = len(data)
+    for i in range(size):
+        bs_reps[i] = np.median(np.random.choice(data, size=n))
+
+    return bs_reps
+
+
+@numba.jit(nopython=True)
+def _draw_bs_reps_std(data, ddof=0, size=1):
+    """
+    Generate bootstrap replicates of the median out of `data`.
+
+    Parameters
+    ----------
+    data : array_like
+        One-dimensional array of data.
+    ddof : int
+        Delta degrees of freedom. Divisor in standard deviation
+        calculation is `len(data) - ddof`.
+    size : int, default 1
+        Number of bootstrap replicates to generate.
+
+    Returns
+    -------
+    output : float
+        Bootstrap replicates of the median computed from `data`.
+    """
+    # Set up output array
+    bs_reps = np.empty(size)
+
+    # Draw replicates
+    n = len(data)
+    for i in range(size):
+        bs_reps[i] = np.std(np.random.choice(data, size=n))
+
+    if ddof > 0:
+        return bs_reps * np.sqrt(n / (n - ddof))
+
+    return bs_reps
 
 
 def draw_bs_pairs_linreg(x, y, size=1):
@@ -291,22 +387,7 @@ def draw_bs_pairs_linreg(x, y, size=1):
     -----
     .. Entries where either `x` or `y` has a nan are ignored.
     """
-    # Make sure they are array-like
-    if np.isscalar(x) or np.isscalar(y):
-        raise RuntimeError('`x` and `y` must be 1D arrays of the same length.')
-
-    # Convert to Numpy arrays
-    x = np.array(x, dtype=float)
-    y = np.array(y, dtype=float)
-
-    # Must be the same length
-    if len(x) != len(y):
-        raise RuntimeError('`x` and `y` must be 1D arrays of the same length.')
-
-    # Clean out nans
-    inds = ~np.logical_and(np.isnan(x), np.isnan(y))
-    x = x[inds]
-    y = y[inds]
+    x, y = _convert_two_data(x, y)
 
     return _draw_bs_pairs_linreg(x, y, size=size)
 
@@ -332,8 +413,6 @@ def _draw_bs_pairs_linreg(x, y, size=1):
     intercept_reps : ndarray
         Pairs bootstrap replicates of the intercept.
     """
-    x, y = _convert_two_data(x, y)
-
     # Set up array of indices to sample from
     inds = np.arange(len(x))
 
@@ -422,7 +501,6 @@ def permutation_sample(data_1, data_2):
     out_2 : ndarray, same shape as `data_2`
         Permutation sample corresponding to `data_2`.
     """
-
     data_1 = _convert_data(data_1)
     data_2 = _convert_data(data_2)
 
@@ -520,6 +598,94 @@ def diff_of_means(data_1, data_2):
         np.mean(data_1) - np.mean(data_2)
     """
     return np.mean(data_1) - np.mean(data_2)
+
+
+def diff_of_means(data_1, data_2):
+    """
+    Difference in means of two arrays.
+
+    Parameters
+    ----------
+    data_1 : array_like
+        One-dimensional array of data.
+    data_2 : array_like
+        One-dimensional array of data.
+
+    Returns
+    -------
+    output : float
+        np.mean(data_1) - np.mean(data_2)
+    """
+    data_1 = _convert_data(data_1)
+    data_2 = _convert_data(data_2)
+
+    return _diff_of_means(data_1, data_2)
+
+
+@numba.jit(nopython=True)
+def _diff_of_means(data_1, data_2):
+    """
+    Difference in means of two arrays.
+
+    Parameters
+    ----------
+    data_1 : array_like
+        One-dimensional array of data.
+    data_2 : array_like
+        One-dimensional array of data.
+
+    Returns
+    -------
+    output : float
+        np.mean(data_1) - np.mean(data_2)
+    """
+    return np.mean(data_1) - np.mean(data_2)
+
+
+def studentized_diff_of_means(data_1, data_2):
+    """
+    Studentized difference in means of two arrays.
+
+    Parameters
+    ----------
+    data_1 : array_like
+        One-dimensional array of data.
+    data_2 : array_like
+        One-dimensional array of data.
+
+    Returns
+    -------
+    output : float
+        Studentized difference of means.
+    """
+    data_1 = _convert_data(data_1)
+    data_2 = _convert_data(data_2)
+
+    return _studentized_diff_of_means(data_1, data_2)
+
+
+@numba.jit(nopython=True)
+def _studentized_diff_of_means(data_1, data_2):
+    """
+    Studentized difference in means of two arrays.
+
+    Parameters
+    ----------
+    data_1 : array_like
+        One-dimensional array of data.
+    data_2 : array_like
+        One-dimensional array of data.
+
+    Returns
+    -------
+    output : float
+        Studentized difference of means.
+    """
+
+    denom = np.sqrt(np.var(data_1) / (len(data_1) - 1)
+                    + np.var(data_2) / (len(data_2) - 1))
+
+    return (np.mean(data_1) - np.mean(data_2)) / denom
 
 
 def pearson_r(data_1, data_2):
@@ -638,6 +804,48 @@ def draw_ks_reps(n, func, args=(), size=10000, n_reps=1):
         generates random number drawn from target distribution.
     args : tuple, default ()
         Arguments to be passed to `func`.
+    size : int, default 10000
+        Number of random numbers to draw from target distribution
+        to approximate its analytical distribution.
+    n_reps : int, default 1
+        Number of pairs Kolmogorov-Smirnov replicates to draw.
+
+    Returns
+    -------
+    output : ndarray
+        Array of Kolmogorov-Smirnov replicates.
+    """
+    f = _make_rng_numba_func(func)
+
+    @numba.jit
+    def _draw_ks_reps(n):
+        # Generate samples from target distribution
+        x_f = np.sort(f(*args, size=size))
+
+        # Initialize K-S replicates
+        reps = np.empty(n_reps)
+
+        # Draw replicates
+        for i in range(n_reps):
+            x_samp = f(*args, size=n)
+            reps[i] = _ks_stat(x_samp, x_f)
+
+        return reps
+
+    return _draw_ks_reps(n)
+
+
+@numba.jit(nopython=True)
+def draw_ks_reps_exponential(n, scale, size=10000, n_reps=1):
+    """
+    Draw Kolmogorov-Smirnov replicates.
+
+    Parameters
+    ----------
+    n : int
+        Size of experimental sample.
+    scale : float
+
     size : int, default 10000
         Number of random numbers to draw from target distribution
         to approximate its analytical distribution.
@@ -794,6 +1002,7 @@ def _make_two_arg_numba_func(func):
         return func(x, y, *args)
     return f
 
+
 def _make_rng_numba_func(func):
     """
     Make a Numba'd version of a function to draw random numbers.
@@ -817,6 +1026,7 @@ def _make_rng_numba_func(func):
     def f(args, size=1):
         return func(*args, size=size)
     return f
+
 
 @numba.jit(nopython=True)
 def seed_numba(seed):
