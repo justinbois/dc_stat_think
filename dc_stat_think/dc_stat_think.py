@@ -707,6 +707,11 @@ def studentized_diff_of_means(data_1, data_2):
     -------
     output : float
         Studentized difference of means.
+
+    Notes
+    -----
+    .. If the variance of both `data_1` and `data_2` is zero, returns
+       np.nan.
     """
     data_1 = _convert_data(data_1)
     data_2 = _convert_data(data_2)
@@ -730,10 +735,18 @@ def _studentized_diff_of_means(data_1, data_2):
     -------
     output : float
         Studentized difference of means.
+
+    Notes
+    -----
+    .. If the variance of both `data_1` and `data_2` is zero, returns
+       np.nan.
     """
 
     denom = np.sqrt(np.var(data_1) / (len(data_1) - 1)
                     + np.var(data_2) / (len(data_2) - 1))
+
+    if denom == 0.0:
+        return np.nan
 
     return (np.mean(data_1) - np.mean(data_2)) / denom
 

@@ -102,6 +102,32 @@ def test_pandas_conversion():
     assert np.isclose(x, np.array([9.1, 10.1, 11.1])).all()
     assert np.isclose(y, np.array([1/3, 2/3, 1.0])).all()
 
+    df = pd.DataFrame({
+        'a': np.concatenate((np.random.normal(0, 1, size=10), [np.nan]*990)),
+        'b': np.random.normal(0, 1, size=1000)})
+    correct, _ = st.ks_2samp(df['a'].dropna(), df['b'])
+    assert np.isclose(dcst.ks_stat(df['a'], df['b']), correct)
+
+    df = pd.DataFrame({
+        'a': np.concatenate((np.random.normal(0, 1, size=80), [np.nan]*20)),
+        'b': np.random.normal(0, 1, size=100)})
+    dcst.seed_numba(42)
+    correct = dcst.draw_bs_reps(df['a'].values, np.mean, size=100)
+    dcst.seed_numba(42)
+    assert np.isclose(dcst.draw_bs_reps(df['a'], np.mean, size=100), correct).all()
+
+    dcst.seed_numba(42)
+    correct = dcst.draw_bs_reps(df['b'].values, np.mean, size=100)
+    dcst.seed_numba(42)
+    assert np.isclose(dcst.draw_bs_reps(df['b'], np.mean, size=100), correct).all()
+
+    dcst.seed_numba(42)
+    correct = dcst.draw_perm_reps(df['a'].values, df['b'].values,
+                                  dcst.diff_of_means, size=100)
+    dcst.seed_numba(42)
+    assert np.isclose(dcst.draw_perm_reps(df['a'], df['b'], dcst.diff_of_means,
+                      size=100), correct).all()
+
 
 def test_ecdf_formal():
     assert dcst.ecdf_formal(0.1, [0, 1, 2, 3]) == 0.25
@@ -130,3 +156,14 @@ def test_pearson_r():
             x = np.random.random(n)
             y = np.random.random(n)
             assert np.isclose(dcst.pearson_r(x, y), np.corrcoef(x, y)[0,1])
+
+
+def test_studentized_diff_of_means():
+    data_1 = np.ones(10)
+    data_2 = 2*np.ones(10)
+    assert np.isnan(dcst.studentized_diff_of_means(data_1, data_2))
+
+    data_1 = np.array([1, 2, 3, 4])
+    data_2 = np.array([7, 5, 9, 6, 8])
+    assert np.isclose(dcst.studentized_diff_of_means(data_1, data_2),
+                      -4.7000967108038418)
