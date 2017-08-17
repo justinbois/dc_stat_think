@@ -23,16 +23,21 @@ def ecdf_formal(x, data):
     output : float or ndarray
         Value of the ECDF at `x`.
     """
-    # Convert x to array
+    # Remember if the input was scalar
     if np.isscalar(x):
-        x = np.array([x], dtype=np.float)
         return_scalar = True
     else:
-        x = np.array(x, dtype=np.float)
         return_scalar = False
 
+    # If x has any nans, raise a RuntimeError
+    if np.isnan(x).any():
+        raise RuntimeError('Input cannot have NaNs.')
+
+    # Convert x to array
+    x = _convert_data(x, inf_ok=True)
+
     # Convert data to sorted NumPy array with no nan's
-    data = _convert_data(data)
+    data = _convert_data(data, inf_ok=True)
 
     # Compute formal ECDF value
     out = _ecdf_formal(x, np.sort(data))
@@ -63,14 +68,11 @@ def _ecdf_formal(x, data):
     output = np.empty_like(x)
 
     for i, x_val in enumerate(x):
-        if np.isnan(x_val):
-            output[i] = np.nan
-        else:
-            j = 0
-            while j < len(data) and x_val >= data[j]:
-                j += 1
+        j = 0
+        while j < len(data) and x_val >= data[j]:
+            j += 1
 
-            output[i] = j
+        output[i] = j
 
     return output / len(data)
 
@@ -216,7 +218,8 @@ def bootstrap_replicate_1d(data, func, args=()):
     -----
     .. nan values are ignored.
     """
-    data = _convert_data(data)
+    data = _convert_data(data, inf_ok=True, min_len=1)
+
     return func(np.random.choice(data, size=len(data)))
 
 
@@ -386,8 +389,15 @@ def draw_bs_pairs_linreg(x, y, size=1):
     Notes
     -----
     .. Entries where either `x` or `y` has a nan are ignored.
+    .. It is possible that a pairs bootstrap sample has the
+       same pair over and over again. In this case, a linear
+       regression cannot be computed. The pairs bootstrap
+       replicate in this instance is NaN.
     """
-    x, y = _convert_two_data(x, y)
+    x, y = _convert_two_data(x, y, inf_ok=False, min_len=2)
+
+    if np.isclose(x, y).all():
+        raise RuntimeError('All x and y values are equal, cannot do regression')
 
     return _draw_bs_pairs_linreg(x, y, size=size)
 
@@ -412,6 +422,12 @@ def _draw_bs_pairs_linreg(x, y, size=1):
         Pairs bootstrap replicates of the slope.
     intercept_reps : ndarray
         Pairs bootstrap replicates of the intercept.
+
+    Notes
+    -----
+    .. It is possible that a pairs bootstrap sample ends up with a
+       poorly-conditioned least squares problem. The pairs bootstrap
+       replicate in this instance is NaN.
     """
     # Set up array of indices to sample from
     inds = np.arange(len(x))
@@ -424,8 +440,21 @@ def _draw_bs_pairs_linreg(x, y, size=1):
     for i in range(size):
         bs_inds = np.random.choice(inds, len(inds))
         bs_x, bs_y = x[bs_inds], y[bs_inds]
+
+        # Construct and scale least squares problem
         A = np.stack((bs_x, np.ones(len(bs_x)))).transpose()
-        bs_slope_reps[i], bs_intercept_reps[i] = np.linalg.lstsq(A, bs_y)[0]
+        A2 = A * A
+        scale = np.sqrt(np.array([np.sum(A2[:,0]), np.sum(A2[:,1])]))
+        A /= scale
+
+        # Solve
+        c, resids, rank, s = np.linalg.lstsq(A, bs_y)
+
+        # Return NaN if poorly conditioned
+        if rank == 2:
+            bs_slope_reps[i], bs_intercept_reps[i] = (c.T / scale).T
+        else:
+            bs_slope_reps[i], bs_intercept_reps[i] = np.nan, np.nan
 
     return bs_slope_reps, bs_intercept_reps
 
@@ -454,7 +483,7 @@ def draw_bs_pairs(x, y, func, args=(), size=1):
     output : ndarray
         Bootstrap replicates.
     """
-    x, y = _convert_two_data(x, y)
+    x, y = _convert_two_data(x, y, min_len=1)
 
     # Make Numba'd function
     f = _make_two_arg_numba_func(func)
@@ -471,9 +500,9 @@ def draw_bs_pairs(x, y, func, args=(), size=1):
 
         # Generate replicates
         for i in range(size):
-            bs_inds = np.random.choice(inds, len(n))
+            bs_inds = np.random.choice(inds, n)
             bs_x, bs_y = x[bs_inds], y[bs_inds]
-            bs_replicates[i] = f(bs_x, bs_y, *args)
+            bs_replicates[i] = f(bs_x, bs_y, args)
 
         return bs_replicates
 
@@ -581,7 +610,7 @@ def draw_perm_reps(data_1, data_2, func, args=(), size=1):
         perm_reps = np.empty(size)
         for i in range(size):
             np.random.shuffle(x)
-            perm_reps[i] = f(x[:n1], x[n1:], *args)
+            perm_reps[i] = f(x[:n1], x[n1:], args)
 
         return perm_reps
 
@@ -768,10 +797,7 @@ def pearson_r(data_1, data_2):
         The Pearson correlation coefficient between `data_1`
         and `data_2`.
     """
-    x, y = _convert_two_data(data_1, data_2)
-
-    if len(x) == 1:
-        return np.nan
+    x, y = _convert_two_data(data_1, data_2, inf_ok=False, min_len=2)
 
     return _pearson_r(x, y)
 
@@ -883,9 +909,6 @@ def draw_ks_reps(n, func, args=(), size=10000, n_reps=1):
     elif func == np.random.normal:
         return _draw_ks_reps_normal(n, *args, size=size, n_reps=n_reps)
 
-
-    print('no numba')
-
     # Generate samples from target distribution
     x_f = np.sort(func(*args, size=size))
 
@@ -974,7 +997,7 @@ def _draw_ks_reps_normal(n, mu, sigma, size=10000, n_reps=1):
     return reps
 
 
-def _convert_data(data):
+def _convert_data(data, inf_ok=False, min_len=1):
     """
     Convert inputted 1D data set into NumPy array of floats.
     All nan's are dropped.
@@ -983,6 +1006,10 @@ def _convert_data(data):
     ----------
     data : int, float, or array_like
         Input data, to be converted.
+    inf_ok : bool, default False
+        If True, np.inf values are allowed in the arrays.
+    min_len : int, default 1
+        Minimum length of array.
 
     Returns
     -------
@@ -991,19 +1018,27 @@ def _convert_data(data):
     """
     # If it's scalar, convert to array
     if np.isscalar(data):
-        return np.array([data], dtype=np.float)
+        data = np.array([data], dtype=np.float)
 
-    # Convert data to sorted NumPy array with no nan's
+    # Convert data to NumPy array
     data = np.array(data, dtype=np.float)
 
-    # Make sure they are 1D arrays
+    # Make sure it is 1D
     if len(data.shape) != 1:
         raise RuntimeError('`data` must be a 1D array.')
 
-    return data[~np.isnan(data)]
+    # Check for infinite entries
+    if not inf_ok and np.isinf(data).any():
+        raise RuntimeError('All entries must be finite.')
+
+    # Check to minimal length
+    if len(data) < min_len:
+        raise RuntimeError('Array must have at least {0:d} non-NaN entries.'.format(min_len))
+
+    return data
 
 
-def _convert_two_data(x, y):
+def _convert_two_data(x, y, inf_ok=False, min_len=1):
     """
     Converted two inputted 1D data sets into Numpy arrays of floats.
     Indices where one of the two arrays is nan are dropped.
@@ -1014,6 +1049,10 @@ def _convert_two_data(x, y):
         Input data, to be converted. `x` and `y` must have the same length.
     y : array_like
         Input data, to be converted. `x` and `y` must have the same length.
+    inf_ok : bool, default False
+        If True, np.inf values are allowed in the arrays.
+    min_len : int, default 1
+        Minimum length of array.
 
     Returns
     -------
@@ -1024,28 +1063,34 @@ def _convert_two_data(x, y):
     """
     # Make sure they are array-like
     if np.isscalar(x) or np.isscalar(y):
-        raise RuntimeError('`x` and `y` must be 1D arrays of the same length.')
+        raise RuntimeError('Arrays must be 1D arrays of the same length.')
 
     # Convert to Numpy arrays
     x = np.array(x, dtype=float)
     y = np.array(y, dtype=float)
 
+    # Check for infinite entries
+    if not inf_ok and (np.isinf(x).any() or np.isinf(y).any()):
+        raise RuntimeError('All entries in arrays must be finite.')
+
     # Make sure they are 1D arrays
     if len(x.shape) != 1 or len(y.shape) != 1:
-        raise RuntimeError('`x` and `y` must be 1D arrays.')
+        raise RuntimeError('Arrays must be 1D arrays.')
 
     # Must be the same length
     if len(x) != len(y):
-        raise RuntimeError('`x` and `y` must be 1D arrays of the same length.')
-
-    # Must be nonempty
-    if len(x) == 0:
-        raise RuntimeError('`x` and `y` must be nonempty.')
+        raise RuntimeError('Arrays must be 1D arrays of the same length.')
 
     # Clean out nans
-    inds = ~np.logical_and(np.isnan(x), np.isnan(y))
+    inds = ~np.logical_or(np.isnan(x), np.isnan(y))
+    x = x[inds]
+    y = y[inds]
 
-    return x[inds], y[inds]
+    # Check to minimal length
+    if len(x) < min_len:
+        raise RuntimeError('Arrays must have at least {0:d} mutual non-NaN entries.'.format(min_len))
+
+    return x, y
 
 
 def _make_one_arg_numba_func(func):
@@ -1127,7 +1172,7 @@ def _make_rng_numba_func(func):
 
 
 @numba.jit(nopython=True)
-def seed_numba(seed):
+def _seed_numba(seed):
     """
     Seed the random number generator for Numba'd functions.
 
