@@ -1,6 +1,15 @@
 # -*- coding: utf-8 -*-
 
-"""Utilities for DataCamp's statistical thinking courses."""
+"""
+Utilities for DataCamp's statistical thinking courses.
+
+This module takes entirely "hacker stats" approaches using only
+Numpy and its random number generator to do all statistical
+calculations. In many cases, this is a very accurate and fast
+way to do things, and in almost all cases, it also has pedagogical
+benefits. However, in some cases, the scipy.stats module offers
+more efficient calculation.
+"""
 
 import numpy as np
 import numba
@@ -831,9 +840,6 @@ def _pearson_r(x, y):
        used.
     .. If the variance of `data_1` or `data_2` is zero, return NaN.
     """
-    std_x = np.std(x)
-    std_y = np.std(y)
-
     if _allequal(x) or _allequal(y):
         return np.nan
 
@@ -842,7 +848,9 @@ def _pearson_r(x, y):
 
 def ks_stat(data_1, data_2):
     """
-    Compute the 2-sample Kolmogorov-Smirnov statistic.
+    Compute the 2-sample Kolmogorov-Smirnov statistic with the
+    assumption that the ECDF of `data_2` is an approximation for
+    the CDF of a continuous distribution function.
 
     Parameters
     ----------
@@ -855,6 +863,25 @@ def ks_stat(data_1, data_2):
     -------
     output : float
         Two-sample Kolmogorov-Smirnov statistic.
+
+    Notes
+    -----
+    .. Compares the distances between the concave corners of `data_1`
+       and the value of the ECDF of `data_2` and also the distances
+       between the convex corners of `data_1` and the value of the
+       ECDF of `data_2`. This approach is taken because we are
+       approximating the CDF of a continuous distribution
+       function with the ECDF of `data_2`.
+    .. This is not strictly speaking a 2-sample K-S statistic because
+       because of the assumption that the ECDF of `data_2` is
+       approximating the CDF of a continuous distribution. This can be
+       seen from a pathological example. Imagine we have two data sets,
+           data_1 = np.array([0, 0])
+           data_2 = np.array([0, 0])
+       The distance between the ECDFs of these two data sets should be
+       zero everywhere. This function will return 1.0, since that is
+       the distance from the "top" of the step in the ECDF of `data_2`
+       and the "bottom" of the step in the ECDF of `data_1.
     """
     data_1 = _convert_data(data_1)
     data_2 = _convert_data(data_2)
@@ -885,7 +912,7 @@ def _ks_stat(data1, data2):
     # Compute ECDF from data
     x, y = _ecdf_dots(data1)
 
-    # Compute corresponding values of the target CDF
+    # Compute corresponding values of the theoretical CDF
     cdf = _ecdf_formal(x, data2)
 
     # Compute distances between convex corners and CDF
@@ -907,11 +934,11 @@ def draw_ks_reps(n, func, args=(), size=10000, n_reps=1):
         Size of experimental sample.
     func : function
         Function with call signature `func(*args, size=1)` that
-        generates random number drawn from target distribution.
+        generates random number drawn from theoretical distribution.
     args : tuple, default ()
         Arguments to be passed to `func`.
     size : int, default 10000
-        Number of random numbers to draw from target distribution
+        Number of random numbers to draw from theoretical distribution
         to approximate its analytical distribution.
     n_reps : int, default 1
         Number of pairs Kolmogorov-Smirnov replicates to draw.
@@ -920,13 +947,23 @@ def draw_ks_reps(n, func, args=(), size=10000, n_reps=1):
     -------
     output : ndarray
         Array of Kolmogorov-Smirnov replicates.
+
+    Notes
+    -----
+    .. The theoretical distribution must be continuous for the K-S
+       statistic to make sense.
+    .. This function approximates the theoretical distribution by
+       drawing many samples out of it, in the spirit of hacker stats.
+       scipy.stats.kstest() computes the K-S statistic exactly, and
+       also does the K-S hypothesis test exactly in a much more
+       efficient calculation.
     """
     if func == np.random.exponential:
         return _draw_ks_reps_exponential(n, *args, size=size, n_reps=n_reps)
     elif func == np.random.normal:
         return _draw_ks_reps_normal(n, *args, size=size, n_reps=n_reps)
 
-    # Generate samples from target distribution
+    # Generate samples from theoretical distribution
     x_f = np.sort(func(*args, size=size))
 
     # Initialize K-S replicates
@@ -962,7 +999,7 @@ def _draw_ks_reps_exponential(n, scale, size=10000, n_reps=1):
     output : ndarray
         Array of Kolmogorov-Smirnov replicates.
     """
-    # Generate samples from target distribution
+    # Generate samples from theoretical distribution
     x_f = np.sort(np.random.exponential(scale, size=size))
 
     # Initialize K-S replicates
@@ -1000,7 +1037,7 @@ def _draw_ks_reps_normal(n, mu, sigma, size=10000, n_reps=1):
     output : ndarray
         Array of Kolmogorov-Smirnov replicates.
     """
-    # Generate samples from target distribution
+    # Generate samples from theoretical distribution
     x_f = np.sort(np.random.normal(mu, sigma, size=size))
 
     # Initialize K-S replicates

@@ -68,14 +68,11 @@ def _ecdf_formal(x, data):
     output = np.empty_like(x)
 
     for i, x_val in enumerate(x):
-        if np.isnan(x_val):
-            output[i] = np.nan
-        else:
-            j = 0
-            while j < len(data) and x_val >= data[j]:
-                j += 1
+        j = 0
+        while j < len(data) and x_val >= data[j]:
+            j += 1
 
-            output[i] = j
+        output[i] = j
 
     return output / len(data)
 
@@ -799,9 +796,14 @@ def pearson_r(data_1, data_2):
     output : float
         The Pearson correlation coefficient between `data_1`
         and `data_2`.
+
+    Notes
+    -----
+    .. Only entries where both `data_1` and `data_2` are not NaN are
+       used.
+    .. If the variance of `data_1` or `data_2` is zero, return NaN.
     """
     x, y = _convert_two_data(data_1, data_2, inf_ok=False, min_len=2)
-
     return _pearson_r(x, y)
 
 
@@ -822,7 +824,16 @@ def _pearson_r(x, y):
     output : float
         The Pearson correlation coefficient between `data_1`
         and `data_2`.
+
+    Notes
+    -----
+    .. Only entries where both `data_1` and `data_2` are not NaN are
+       used.
+    .. If the variance of `data_1` or `data_2` is zero, return NaN.
     """
+    if _allequal(x) or _allequal(y):
+        return np.nan
+
     return (np.mean(x*y) - np.mean(x) * np.mean(y)) / np.std(x) / np.std(y)
 
 
@@ -1000,7 +1011,7 @@ def _draw_ks_reps_normal(n, mu, sigma, size=10000, n_reps=1):
     return reps
 
 
-def _convert_data(data, inf_ok=False, nan_ok=False, min_len=1):
+def _convert_data(data, inf_ok=False, min_len=1):
     """
     Convert inputted 1D data set into NumPy array of floats.
     All nan's are dropped.
@@ -1011,8 +1022,6 @@ def _convert_data(data, inf_ok=False, nan_ok=False, min_len=1):
         Input data, to be converted.
     inf_ok : bool, default False
         If True, np.inf values are allowed in the arrays.
-    nan_ok : bool, default False
-        If True, NaNs can be left in array.
     min_len : int, default 1
         Minimum length of array.
 
@@ -1032,13 +1041,12 @@ def _convert_data(data, inf_ok=False, nan_ok=False, min_len=1):
     if len(data.shape) != 1:
         raise RuntimeError('`data` must be a 1D array.')
 
+    # Remove NaNs
+    data = data[~np.isnan(data)]
+
     # Check for infinite entries
     if not inf_ok and np.isinf(data).any():
         raise RuntimeError('All entries must be finite.')
-
-    # Clean out nans
-    if not nan_ok:
-        data = data[~np.isnan(data)]
 
     # Check to minimal length
     if len(data) < min_len:
@@ -1100,6 +1108,54 @@ def _convert_two_data(x, y, inf_ok=False, min_len=1):
         raise RuntimeError('Arrays must have at least {0:d} mutual non-NaN entries.'.format(min_len))
 
     return x, y
+
+
+# @numba.jit(nopython=True)
+def _allequal(x, rtol=1e-5, atol=1e-14):
+    """
+    Determine if all entries in an array are equal.
+
+    Parameters
+    ----------
+    x : ndarray
+        Array to test.
+
+    Returns
+    -------
+    output : bool
+        True is all entries in the array are equal, False otherwise.
+    """
+    if len(x) == 1:
+        return True
+
+    for a in x[1:]:
+        if np.abs(a-x[0]) > (atol + rtol * np.abs(a)):
+            return False
+    return True
+
+
+# @numba.jit(nopython=True)
+def _allclose(x, y, rtol=1e-5, atol=1e-14):
+    """
+    Determine if all entries in two arrays are close to each other.
+
+    Parameters
+    ----------
+    x : ndarray
+        First array to compare.
+    y : ndarray
+        Second array to compare.
+
+    Returns
+    -------
+    output : bool
+        True is each entry in the respective arrays is equal.
+        False otherwise.
+    """
+    for a, b in zip(x, y):
+        if np.abs(a-b) > (atol + rtol * np.abs(b)):
+            return False
+    return True
 
 
 def _make_one_arg_numba_func(func):
