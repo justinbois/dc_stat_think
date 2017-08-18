@@ -5,7 +5,7 @@
 
 from setuptools import setup, find_packages
 
-with open('README.rst') as readme_file:
+with open('README.md') as readme_file:
     readme = readme_file.read()
 
 with open('HISTORY.rst') as history_file:
@@ -27,7 +27,7 @@ test_requirements = [
 
 setup(
     name='dc_stat_think',
-    version='1.0.0',
+    version='0.1.5',
     description="Utility functions used in the DataCamp Statistical Thinking courses.",
     long_description=readme + '\n\n' + history,
     author="Justin Bois",
