@@ -1,10 +1,6 @@
 # DataCamp Statistical Thinking utilities
 
-[![version](https://img.shields.io/pypi/v/dc_stat_think.svg)](https://pypi.python.org/pypi/dc_stat_think)
-
-[![build status](https://img.shields.io/travis/justinbois/dc_stat_think.svg)](https://travis-ci.org/justinbois/dc_stat_think)
-
-[![updates](https://pyup.io/repos/github/justinbois/dc_stat_think/shield.svg)](https://pyup.io/repos/github/justinbois/dc_stat_think/)
+[![version](https://img.shields.io/pypi/v/dc_stat_think.svg)](https://pypi.python.org/pypi/dc_stat_think) [![build status](https://img.shields.io/travis/justinbois/dc_stat_think.svg)](https://travis-ci.org/justinbois/dc_stat_think) [![updates](https://pyup.io/repos/github/justinbois/dc_stat_think/shield.svg)](https://pyup.io/repos/github/justinbois/dc_stat_think/)
 
 Utility functions used in the DataCamp Statistical Thinking courses.
 - [Statistical Thinking in Python Part I](https://www.datacamp.com/courses/statistical-thinking-in-python-part-1/)
