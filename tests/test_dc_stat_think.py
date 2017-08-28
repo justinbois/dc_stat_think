@@ -163,7 +163,7 @@ def test_draw_bs_reps(data, seed, size):
 
 
 def test_draw_bs_pairs_linreg():
-    for n in range(4, 10):
+    for n in range(10, 20):
         for size in [1, 10, 100]:
             x = np.random.random(n)
             y = 1.5 * x + 3.0 + (np.random.random(n) - 0.5) * 0.1
@@ -175,8 +175,18 @@ def test_draw_bs_pairs_linreg():
             np.random.seed(seed)
             slope_correct, intercept_correct = \
                                 original.draw_bs_pairs_linreg(x, y, size=size)
-            assert np.allclose(slope, slope_correct, atol=atol, equal_nan=True)
+            assert np.allclose(slope, slope_correct, atol=atol, 
+                               equal_nan=True)
             assert np.allclose(intercept, intercept_correct, atol=atol, equal_nan=True)
+
+
+def test_draw_bs_pairs_linreg_edge():
+    x = np.ones(10)
+    y = np.ones(10)
+    slope, intercept = dcst.draw_bs_pairs_linreg(x, y, size=10)
+    assert np.isnan(slope).all()
+    assert np.isnan(intercept).all()
+
 
 
 def test_draw_bs_pairs_linreg_nan():

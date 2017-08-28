@@ -405,9 +405,6 @@ def draw_bs_pairs_linreg(x, y, size=1):
     """
     x, y = _convert_two_data(x, y, inf_ok=False, min_len=2)
 
-    if np.isclose(x, y).all():
-        raise RuntimeError('All x and y values are equal, cannot do regression')
-
     return _draw_bs_pairs_linreg(x, y, size=size)
 
 
