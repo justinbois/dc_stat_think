@@ -63,6 +63,29 @@ def test_ecdf(data):
     assert np.allclose(y, y_correct, atol=atol, equal_nan=True)
 
 
+@hypothesis.given(arrays_2, hs.integers(0, 1000000))
+def test_swap_random(data, seed):
+    a, b = data
+    np.random.seed(seed)
+    a_orig, b_orig = original.swap_random(a, b)
+    dcst_private._seed_numba(seed)
+    a_out, b_out = dcst.swap_random(a, b)
+
+    assert len(a_out) == len(b_out) == len(a) == len(b)
+
+    # Each entry should be present same number of times
+    ab = np.sort(np.concatenate((a, b)))
+    ab_out = np.sort(np.concatenate((a_out, b_out)))
+    assert np.allclose(ab, ab_out, atol=atol, equal_nan=True)
+
+    # Check for swaps matching
+    for i in range(len(a)):
+        ab = np.array([a[i], b[i]])
+        ab_out = np.array([a_out[i], b_out[i]])
+        assert ab[0] in ab_out
+        assert ab[1] in ab_out
+
+
 def test_ecdf_formal_for_plotting():
     data = np.array([2, 1, 3])
     y_correct = np.array([0, 0, 1, 1, 2, 2, 3, 3]) / 3
@@ -322,6 +345,16 @@ def test_ks_stat(x):
 def test_convert_data(data):
     assert np.allclose(data, dcst_private._convert_data(data), atol=atol)
 
+    df = pd.DataFrame({'test': data})
+    assert np.allclose(data, dcst_private._convert_data(df.loc[:,'test']), 
+                       atol=atol)
+    with pytest.raises(RuntimeError) as excinfo:
+        dcst_private._convert_data(df)
+    excinfo.match('Input must be a 1D array or Pandas series.')
+
+    s = pd.Series(data)
+    assert np.allclose(data, dcst_private._convert_data(s), atol=atol)
+
 
 @hypothesis.given(hs.floats(-10, 10))
 def test_convert_data_scalar(data):
@@ -353,6 +386,23 @@ def test_convert_two_data(data):
     x, y = dcst_private._convert_two_data(x_correct, y_correct)
     assert np.allclose(x, x_correct, atol=atol)
     assert np.allclose(y, y_correct, atol=atol)
+
+    df = pd.DataFrame(data=data.transpose(), columns=['test1', 'test2'])
+    x, y = dcst_private._convert_two_data(df['test1'], df['test2'])
+    assert np.allclose(x, x_correct, atol=atol)
+    assert np.allclose(y, y_correct, atol=atol)
+
+    with pytest.raises(RuntimeError) as excinfo:
+        dcst_private._convert_two_data(df, df['test2'])
+    excinfo.match('Input must be a 1D array or Pandas series.')
+
+    with pytest.raises(RuntimeError) as excinfo:
+        dcst_private._convert_two_data(df['test1'], df)
+    excinfo.match('Input must be a 1D array or Pandas series.')
+
+    with pytest.raises(RuntimeError) as excinfo:
+        dcst_private._convert_two_data(df, df)
+    excinfo.match('Input must be a 1D array or Pandas series.')
 
 
 def test_convert_two_data_edge():
@@ -396,7 +446,8 @@ def test_convert_two_data_edge():
     assert np.allclose(y, y_correct, atol=atol)
 
 
-def test_pandas_conversion():
+@hypothesis.given(hs.integers(0, 1000000))
+def test_pandas_conversion(seed):
     df = pd.DataFrame({'a': [3, 2, 1, 4],
                        'b': [8, 6, 7, 5],
                        'c': [9.1, 10.1, 11.1, np.nan]})
@@ -418,21 +469,21 @@ def test_pandas_conversion():
     df = pd.DataFrame({
         'a': np.concatenate((np.random.normal(0, 1, size=80), [np.nan]*20)),
         'b': np.random.normal(0, 1, size=100)})
-    dcst_private._seed_numba(42)
+    dcst_private._seed_numba(seed)
     correct = dcst.draw_bs_reps(df['a'].values, np.mean, size=100)
-    dcst_private._seed_numba(42)
+    dcst_private._seed_numba(seed)
     assert np.allclose(dcst.draw_bs_reps(df['a'], np.mean, size=100), correct,
                        atol=atol)
 
-    dcst_private._seed_numba(42)
+    dcst_private._seed_numba(seed)
     correct = dcst.draw_bs_reps(df['b'].values, np.mean, size=100)
-    dcst_private._seed_numba(42)
+    dcst_private._seed_numba(seed)
     assert np.allclose(dcst.draw_bs_reps(df['b'], np.mean, size=100), correct,
                        atol=atol)
 
-    dcst_private._seed_numba(42)
+    dcst_private._seed_numba(seed)
     correct = dcst.draw_perm_reps(df['a'].values, df['b'].values,
                                   dcst.diff_of_means, size=100)
-    dcst_private._seed_numba(42)
-    assert np.allclose(dcst.draw_perm_reps(df['a'], df['b'], dcst.diff_of_means,
-                      size=100), correct, atol=atol)
+    dcst_private._seed_numba(seed)
+    assert np.allclose(dcst.draw_perm_reps(df['a'], df['b'], 
+                       dcst.diff_of_means, size=100), correct, atol=atol)

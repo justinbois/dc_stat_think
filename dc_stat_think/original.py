@@ -7,6 +7,7 @@ originally written in Statistical Thinking I and II.
 
 import numpy as np
 
+
 def ecdf(data):
     """Compute ECDF for a one-dimensional array of measurements."""
     # Number of data points
@@ -19,6 +20,7 @@ def ecdf(data):
     y = np.arange(1, n+1) / n
 
     return x, y
+
 
 def pearson_r(x, y):
     """Compute Pearson correlation coefficient between two arrays."""
@@ -147,3 +149,64 @@ def draw_bs_pairs(x, y, func, size=1):
         bs_replicates[i] = func(bs_x, bs_y)
 
     return bs_replicates
+
+
+def swap_random(a, b):
+    """Randomly swap entries in two arrays."""
+
+    # Indices to swap
+    swap_inds = np.random.random(size=len(a)) < 0.5
+    
+    # Make copies of arrays a and b for output
+    a_out = np.copy(a)
+    b_out = np.copy(b)
+    
+    # Swap values
+    a_out[swap_inds] = b[swap_inds]
+    b_out[swap_inds] = a[swap_inds]
+
+    return a_out, b_out
+
+def b_value(mags, mt, perc=[2.5, 97.5], n_reps=None):
+    """
+    Compute the b-value and optionally the confidence interval.
+
+    Parameters
+    ----------
+    mags : array_like
+        Array of magnitudes.
+    mt : float
+        Threshold magnitude, only magnitudes about this are considered.
+    perc : tuple of list, default [2.5, 97.5]
+        Percentiles for edges of bootstrap confidence interval. Ignored
+        if `n_reps` is None.
+    n_reps : int or None, default None
+        If not None, the number of bootstrap replicates of the b-value
+        to use in the computationation of the confidence interval.
+
+    Returns
+    -------
+    b : float
+        The b-value.
+    conf_int : ndarray, shape (2,), optional
+        If `n_reps` is not None, the confidence interval of the b-value.
+    """
+    # Extract magnitudes above completeness threshold
+    m = mags[mags >= mt]
+
+    # Compute b-value
+    b = (np.mean(m) - mt) * np.log(10)
+
+    # Draw bootstrap replicates
+    if n_reps is None:
+        return b
+    else:
+        m_bs_reps = dcst.draw_bs_reps(m, np.mean, size=n_reps)
+
+        # Compute b-value from replicates
+        b_bs_reps = (m_bs_reps - mt) * np.log(10)
+
+        # Compute confidence interval
+        conf_int = np.percentile(b_bs_reps, perc)
+    
+        return b, conf_int
