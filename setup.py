@@ -40,7 +40,7 @@ setup(
     zip_safe=False,
     keywords='dc_stat_think',
     classifiers=[
-        'Development Status :: Beta',
+        'Development Status :: 4 - Beta',
         'Intended Audience :: Developers',
         'License :: OSI Approved :: MIT License',
         'Natural Language :: English',
