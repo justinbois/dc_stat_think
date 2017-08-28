@@ -1227,6 +1227,52 @@ def _draw_ks_reps_normal(n, mu, sigma, size=10000, n_reps=1):
     return reps
 
 
+def frac_yay_dems(dems, reps):
+    """
+    Compute fraction of yay votes from Democrats. This function is
+    specific to exercises in Statistical Thinking in Python Part I.
+    It is only included here for completeness.
+
+    Parameters
+    ----------
+    dems : array_like, dtype bool
+        Votes for democrats, True for yay vote, False for nay.
+    reps : ignored
+        Ignored; was only needed to specific application in permutation
+        test in Statistical Thinking I.
+
+    Returns
+    -------
+    output : float
+        Fraction of Democrates who voted yay.
+    """
+    if dems.dtype != bool:
+        raise RuntimeError('`dems` must be array of bools.')
+
+    return np.sum(dems) / len(dems)
+
+
+def heritability(parents, offspring):
+    """
+    Compute the heritability from parent and offspring samples.
+
+    Parameters
+    ----------
+    parents : array_like
+        Array of data for trait of parents.
+    offspring : array_like
+        Array of data for trait of offspring.
+
+    Returns
+    -------
+    output : float
+        Heritability of trait.
+    """
+    par, off = _convert_two_data(parents, offspring)
+    covariance_matrix = np.cov(par, off)
+    return covariance_matrix[0,1] / covariance_matrix[0,0]
+
+
 def _convert_data(data, inf_ok=False, min_len=1):
     """
     Convert inputted 1D data set into NumPy array of floats.

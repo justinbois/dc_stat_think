@@ -1,6 +1,15 @@
 # -*- coding: utf-8 -*-
 
-"""Utilities for DataCamp's statistical thinking courses."""
+"""
+Utilities for DataCamp's statistical thinking courses.
+
+This module takes entirely "hacker stats" approaches using only
+Numpy and its random number generator to do all statistical
+calculations. In many cases, this is a very accurate and fast
+way to do things, and in almost all cases, it also has pedagogical
+benefits. However, in some cases, the scipy.stats module offers
+more efficient calculation.
+"""
 
 import numpy as np
 import numba
@@ -223,7 +232,7 @@ def bootstrap_replicate_1d(data, func, args=()):
     return func(np.random.choice(data, size=len(data)))
 
 
-def draw_bs_reps(data, func, args=(), size=1):
+def draw_bs_reps(data, func, size=1, args=()):
     """
     Generate bootstrap replicates out of `data` using `func`.
 
@@ -234,10 +243,10 @@ def draw_bs_reps(data, func, args=(), size=1):
     func : function
         Function, with call signature `func(data, *args)` to compute
         replicate statistic from resampled `data`.
-    args : tuple, default ()
-        Arguments to be passed to `func`.
     size : int, default 1
         Number of bootstrap replicates to generate.
+    args : tuple, default ()
+        Arguments to be passed to `func`.
 
     Returns
     -------
@@ -459,7 +468,7 @@ def _draw_bs_pairs_linreg(x, y, size=1):
     return bs_slope_reps, bs_intercept_reps
 
 
-def draw_bs_pairs(x, y, func, args=(), size=1):
+def draw_bs_pairs(x, y, func, size=1, args=()):
     """
     Perform pairs bootstrap for single statistic.
 
@@ -473,10 +482,10 @@ def draw_bs_pairs(x, y, func, args=(), size=1):
         Function, with call signature `func(x, y, *args)` to compute
         replicate statistic from pairs bootstrap sample. It must return
         a single, scalar value.
-    args : tuple, default ()
-        Arguments to be passed to `func`.
     size : int, default 1
         Number of pairs bootstrap replicates to draw.
+    args : tuple, default ()
+        Arguments to be passed to `func`.
 
     Returns
     -------
@@ -563,7 +572,7 @@ def _permutation_sample(data_1, data_2):
     return x[:len(data_1)], x[len(data_1):]
 
 
-def draw_perm_reps(data_1, data_2, func, args=(), size=1):
+def draw_perm_reps(data_1, data_2, func, size=1, args=()):
     """
     Generate permutation replicates of `func` from `data_1` and
     `data_2`
@@ -578,10 +587,10 @@ def draw_perm_reps(data_1, data_2, func, args=(), size=1):
         Function, with call signature `func(x, y, *args)` to compute
         replicate statistic from permutation sample. It must return
         a single, scalar value.
-    args : tuple, default ()
-        Arguments to be passed to `func`.
     size : int, default 1
         Number of pairs bootstrap replicates to draw.
+    args : tuple, default ()
+        Arguments to be passed to `func`.
 
     Returns
     -------
@@ -837,9 +846,187 @@ def _pearson_r(x, y):
     return (np.mean(x*y) - np.mean(x) * np.mean(y)) / np.std(x) / np.std(y)
 
 
+def b_value(mags, mt, perc=[2.5, 97.5], n_reps=None):
+    """
+    Compute the b-value and optionally its confidence interval.
+
+    Parameters
+    ----------
+    mags : array_like
+        Array of magnitudes.
+    mt : float
+        Threshold magnitude, only magnitudes about this are considered.
+    perc : tuple of list, default [2.5, 97.5]
+        Percentiles for edges of bootstrap confidence interval. Ignored
+        if `n_reps` is None.
+    n_reps : int or None, default None
+        If not None, the number of bootstrap replicates of the b-value
+        to use in the computationation of the confidence interval.
+
+    Returns
+    -------
+    b : float
+        The b-value.
+    conf_int : ndarray, shape (2,), optional
+        If `n_reps` is not None, the confidence interval of the b-value.
+    """
+    # Convert mags to Numpy array
+    mags = _convert_data(mags)
+
+    # Extract magnitudes above completeness threshold
+    m = mags[mags >= mt]
+
+    # Compute b-value
+    b = (np.mean(m) - mt) * np.log(10)
+
+    # Draw bootstrap replicates
+    if n_reps is None:
+        return b
+    else:
+        m_bs_reps = dcst.draw_bs_reps(m, np.mean, size=n_reps)
+
+        # Compute b-value from replicates
+        b_bs_reps = (m_bs_reps - mt) * np.log(10)
+
+        # Compute confidence interval
+        conf_int = np.percentile(b_bs_reps, perc)
+    
+        return b, conf_int
+
+
+def swap_random(a, b):
+    """
+    Randomly swap entries in two arrays.
+
+    Parameters
+    ----------
+    a : array_like
+        1D array of entries to be swapped.
+    b : array_like
+        1D array of entries to be swapped. Must have the same lengths
+        as `a`.
+
+    Returns
+    -------
+    a_out : ndarray, dtype float
+        Array with random entries swapped.
+    b_out : ndarray, dtype float
+        Array with random entries swapped.
+    """
+    a, b = _convert_two_data(a, b)
+
+    return _swap_random(a, b)
+
+
+# @numba.jit(nopython=True)
+def _swap_random(a, b):
+    """
+    Randomly swap entries in two arrays.
+
+    Parameters
+    ----------
+    a : array_like
+        1D array of entries to be swapped.
+    b : array_like
+        1D array of entries to be swapped. Must have the same lengths
+        as `a`.
+
+    Returns
+    -------
+    a_out : ndarray, dtype float
+        Array with random entries swapped.
+    b_out : ndarray, dtype float
+        Array with random entries swapped.
+    """
+    # Indices to swap
+    swap_inds = np.where(np.random.random(size=len(a)) < 0.5)
+
+    # Make copies of arrays a and b for output
+    a_out = np.copy(a)
+    b_out = np.copy(b)
+    
+    # Swap values
+    a_out[swap_inds] = b[swap_inds]
+    b_out[swap_inds] = a[swap_inds]
+
+    return a_out, b_out
+
+
+def perform_bernoulli_trials(n, p):
+    """
+    Perform Bernoulli trials and return number of successes.
+
+    Parameters
+    ----------
+    n : int
+        Number of Bernoulli trials
+    p : float
+        Probability of success of Bernoulli trial.
+
+    Returns
+    -------
+    output : int
+        Number of successes.
+
+    Notes
+    -----
+    .. This is equivalent to drawing out of a Binomial distribution,
+       `np.random.binomial(n, p)`, which is far more efficient.
+    """
+    if type(n) != int or n <= 0:
+        raise RuntimeError('`n` must be a positive integer.')
+    if type(p) != float or p < 0 or p > 1:
+        raise RuntimeError('`p` must be a float between 0 and 1.')
+
+    # Initialize number of successes: n_success
+    n_success = 0
+
+    # Perform trials
+    for i in range(n):
+        # Choose random number between zero and one: random_number
+        random_number = np.random.random()
+
+        # If less than p, it's a success  so add one to n_success
+        if random_number < p:
+            n_success += 1
+
+    return n_success
+
+
+def successive_poisson(tau1, tau2, size=1):
+    """
+    Compute time for arrival of 2 successive Poisson processes.
+
+    Parameters
+    ----------
+    tau1 : float
+        Time constant for first Poisson process.
+    tau2 : float
+        Time constant for second Poisson process.
+    size : int
+        Number of draws to make.
+
+    Returns
+    -------
+    output : float or ndarray
+        Waiting time for arrive of two Poisson processes. If `size`==1,
+        returns a scalar. If `size` is greater than one, a ndarray of
+        waiting times.
+    """
+    # Draw samples out of first exponential distribution: t1
+    t1 = np.random.exponential(tau1, size=size)
+
+    # Draw samples out of second exponential distribution: t2
+    t2 = np.random.exponential(tau2, size=size)
+
+    return t1 + t2
+
+
 def ks_stat(data_1, data_2):
     """
-    Compute the 2-sample Kolmogorov-Smirnov statistic.
+    Compute the 2-sample Kolmogorov-Smirnov statistic with the
+    assumption that the ECDF of `data_2` is an approximation for
+    the CDF of a continuous distribution function.
 
     Parameters
     ----------
@@ -852,6 +1039,25 @@ def ks_stat(data_1, data_2):
     -------
     output : float
         Two-sample Kolmogorov-Smirnov statistic.
+
+    Notes
+    -----
+    .. Compares the distances between the concave corners of `data_1`
+       and the value of the ECDF of `data_2` and also the distances
+       between the convex corners of `data_1` and the value of the
+       ECDF of `data_2`. This approach is taken because we are
+       approximating the CDF of a continuous distribution
+       function with the ECDF of `data_2`.
+    .. This is not strictly speaking a 2-sample K-S statistic because
+       because of the assumption that the ECDF of `data_2` is
+       approximating the CDF of a continuous distribution. This can be
+       seen from a pathological example. Imagine we have two data sets,
+           data_1 = np.array([0, 0])
+           data_2 = np.array([0, 0])
+       The distance between the ECDFs of these two data sets should be
+       zero everywhere. This function will return 1.0, since that is
+       the distance from the "top" of the step in the ECDF of `data_2`
+       and the "bottom" of the step in the ECDF of `data_1.
     """
     data_1 = _convert_data(data_1)
     data_2 = _convert_data(data_2)
@@ -882,7 +1088,7 @@ def _ks_stat(data1, data2):
     # Compute ECDF from data
     x, y = _ecdf_dots(data1)
 
-    # Compute corresponding values of the target CDF
+    # Compute corresponding values of the theoretical CDF
     cdf = _ecdf_formal(x, data2)
 
     # Compute distances between convex corners and CDF
@@ -894,7 +1100,7 @@ def _ks_stat(data1, data2):
     return np.max(np.concatenate((D_top, D_bottom)))
 
 
-def draw_ks_reps(n, func, args=(), size=10000, n_reps=1):
+def draw_ks_reps(n, func, size=10000, n_reps=1, args=()):
     """
     Draw Kolmogorov-Smirnov replicates.
 
@@ -904,26 +1110,36 @@ def draw_ks_reps(n, func, args=(), size=10000, n_reps=1):
         Size of experimental sample.
     func : function
         Function with call signature `func(*args, size=1)` that
-        generates random number drawn from target distribution.
-    args : tuple, default ()
-        Arguments to be passed to `func`.
+        generates random number drawn from theoretical distribution.
     size : int, default 10000
-        Number of random numbers to draw from target distribution
+        Number of random numbers to draw from theoretical distribution
         to approximate its analytical distribution.
     n_reps : int, default 1
         Number of pairs Kolmogorov-Smirnov replicates to draw.
+    args : tuple, default ()
+        Arguments to be passed to `func`.
 
     Returns
     -------
     output : ndarray
         Array of Kolmogorov-Smirnov replicates.
+
+    Notes
+    -----
+    .. The theoretical distribution must be continuous for the K-S
+       statistic to make sense.
+    .. This function approximates the theoretical distribution by
+       drawing many samples out of it, in the spirit of hacker stats.
+       scipy.stats.kstest() computes the K-S statistic exactly, and
+       also does the K-S hypothesis test exactly in a much more
+       efficient calculation.
     """
     if func == np.random.exponential:
         return _draw_ks_reps_exponential(n, *args, size=size, n_reps=n_reps)
     elif func == np.random.normal:
         return _draw_ks_reps_normal(n, *args, size=size, n_reps=n_reps)
 
-    # Generate samples from target distribution
+    # Generate samples from theoretical distribution
     x_f = np.sort(func(*args, size=size))
 
     # Initialize K-S replicates
@@ -959,7 +1175,7 @@ def _draw_ks_reps_exponential(n, scale, size=10000, n_reps=1):
     output : ndarray
         Array of Kolmogorov-Smirnov replicates.
     """
-    # Generate samples from target distribution
+    # Generate samples from theoretical distribution
     x_f = np.sort(np.random.exponential(scale, size=size))
 
     # Initialize K-S replicates
@@ -997,7 +1213,7 @@ def _draw_ks_reps_normal(n, mu, sigma, size=10000, n_reps=1):
     output : ndarray
         Array of Kolmogorov-Smirnov replicates.
     """
-    # Generate samples from target distribution
+    # Generate samples from theoretical distribution
     x_f = np.sort(np.random.normal(mu, sigma, size=size))
 
     # Initialize K-S replicates
@@ -1009,6 +1225,52 @@ def _draw_ks_reps_normal(n, mu, sigma, size=10000, n_reps=1):
         reps[i] = _ks_stat(x_samp, x_f)
 
     return reps
+
+
+def frac_yay_dems(dems, reps):
+    """
+    Compute fraction of yay votes from Democrats. This function is
+    specific to exercises in Statistical Thinking in Python Part I.
+    It is only included here for completeness.
+
+    Parameters
+    ----------
+    dems : array_like, dtype bool
+        Votes for democrats, True for yay vote, False for nay.
+    reps : ignored
+        Ignored; was only needed to specific application in permutation
+        test in Statistical Thinking I.
+
+    Returns
+    -------
+    output : float
+        Fraction of Democrates who voted yay.
+    """
+    if dems.dtype != bool:
+        raise RuntimeError('`dems` must be array of bools.')
+
+    return np.sum(dems) / len(dems)
+
+
+def heritability(parents, offspring):
+    """
+    Compute the heritability from parent and offspring samples.
+
+    Parameters
+    ----------
+    parents : array_like
+        Array of data for trait of parents.
+    offspring : array_like
+        Array of data for trait of offspring.
+
+    Returns
+    -------
+    output : float
+        Heritability of trait.
+    """
+    par, off = _convert_two_data(parents, offspring)
+    covariance_matrix = np.cov(par, off)
+    return covariance_matrix[0,1] / covariance_matrix[0,0]
 
 
 def _convert_data(data, inf_ok=False, min_len=1):
@@ -1039,7 +1301,7 @@ def _convert_data(data, inf_ok=False, min_len=1):
 
     # Make sure it is 1D
     if len(data.shape) != 1:
-        raise RuntimeError('`data` must be a 1D array.')
+        raise RuntimeError('Input must be a 1D array or Pandas series.')
 
     # Remove NaNs
     data = data[~np.isnan(data)]
@@ -1092,7 +1354,7 @@ def _convert_two_data(x, y, inf_ok=False, min_len=1):
 
     # Make sure they are 1D arrays
     if len(x.shape) != 1 or len(y.shape) != 1:
-        raise RuntimeError('Arrays must be 1D arrays.')
+        raise RuntimeError('Input must be a 1D array or Pandas series.')
 
     # Must be the same length
     if len(x) != len(y):

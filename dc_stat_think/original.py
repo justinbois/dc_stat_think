@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 
 """
-Utilities for DataCamp's statistical thinking courses as
-originally written in Statistical Thinking I and II.
+Utilities for DataCamp's statistical thinking courses *exactly* as
+originally written in Statistical Thinking I and II and Case Studies In
+Statistical Thinking.
 """
 
 import numpy as np
@@ -80,7 +81,6 @@ def draw_bs_reps(data, func, size=1):
 
 def draw_bs_pairs_linreg(x, y, size=1):
     """Perform pairs bootstrap for linear regression."""
-
     # Set up array of indices to sample from: inds
     inds = np.arange(len(x))
 
@@ -114,7 +114,6 @@ def permutation_sample(data1, data2):
 
 def draw_perm_reps(data_1, data_2, func, size=1):
     """Generate multiple permutation replicates."""
-
     # Initialize array of replicates: perm_replicates
     perm_replicates = np.empty(size)
 
@@ -135,7 +134,6 @@ def diff_of_means(data_1, data_2):
 
 def draw_bs_pairs(x, y, func, size=1):
     """Perform pairs bootstrap for single statistic."""
-
     # Set up array of indices to sample from: inds
     inds = np.arange(len(x))
 
@@ -153,7 +151,6 @@ def draw_bs_pairs(x, y, func, size=1):
 
 def swap_random(a, b):
     """Randomly swap entries in two arrays."""
-
     # Indices to swap
     swap_inds = np.random.random(size=len(a)) < 0.5
     
@@ -167,30 +164,9 @@ def swap_random(a, b):
 
     return a_out, b_out
 
+
 def b_value(mags, mt, perc=[2.5, 97.5], n_reps=None):
-    """
-    Compute the b-value and optionally the confidence interval.
-
-    Parameters
-    ----------
-    mags : array_like
-        Array of magnitudes.
-    mt : float
-        Threshold magnitude, only magnitudes about this are considered.
-    perc : tuple of list, default [2.5, 97.5]
-        Percentiles for edges of bootstrap confidence interval. Ignored
-        if `n_reps` is None.
-    n_reps : int or None, default None
-        If not None, the number of bootstrap replicates of the b-value
-        to use in the computationation of the confidence interval.
-
-    Returns
-    -------
-    b : float
-        The b-value.
-    conf_int : ndarray, shape (2,), optional
-        If `n_reps` is not None, the confidence interval of the b-value.
-    """
+    """Compute the b-value and optionally its confidence interval."""
     # Extract magnitudes above completeness threshold
     m = mags[mags >= mt]
 
@@ -210,3 +186,15 @@ def b_value(mags, mt, perc=[2.5, 97.5], n_reps=None):
         conf_int = np.percentile(b_bs_reps, perc)
     
         return b, conf_int
+
+
+def frac_yay_dems(dems, reps):
+    """Compute fraction of Democrat yay votes."""
+    frac = np.sum(dems) / len(dems)
+    return frac
+
+
+def heritability(parents, offspring):
+    """Compute the heritability from parent and offspring samples."""
+    covariance_matrix = np.cov(parents, offspring)
+    return covariance_matrix[0,1] / covariance_matrix[0,0]
