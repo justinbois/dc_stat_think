@@ -1088,11 +1088,14 @@ def _ks_stat(data1, data2):
     # Compute corresponding values of the theoretical CDF
     cdf = _ecdf_formal(x, data2)
 
-    # Compute distances between convex corners and CDF
+    # Compute distances between concave corners and CDF
     D_top = y - cdf
 
-    # Compute distance between concave corners and CDF
-    D_bottom = cdf - y + 1/len(data1)
+    # Compute distance between convex corners and CDF
+    
+    y_shifted = np.insert(y[:-1],obj=0,values=0)
+    D_bottom = cdf - y_shifted
+    #D_bottom = cdf - y + 1/len(data1)   
 
     return np.max(np.concatenate((D_top, D_bottom)))
 
