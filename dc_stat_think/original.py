@@ -177,7 +177,7 @@ def b_value(mags, mt, perc=[2.5, 97.5], n_reps=None):
     if n_reps is None:
         return b
     else:
-        m_bs_reps = dcst.draw_bs_reps(m, np.mean, size=n_reps)
+        m_bs_reps = draw_bs_reps(m, np.mean, size=n_reps)
 
         # Compute b-value from replicates
         b_bs_reps = (m_bs_reps - mt) * np.log(10)
