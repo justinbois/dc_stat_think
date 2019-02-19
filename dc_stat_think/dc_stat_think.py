@@ -887,7 +887,7 @@ def b_value(mags, mt, perc=[2.5, 97.5], n_reps=None):
 
         # Compute confidence interval
         conf_int = np.percentile(b_bs_reps, perc)
-    
+
         return b, conf_int
 
 
@@ -941,7 +941,7 @@ def _swap_random(a, b):
     # Make copies of arrays a and b for output
     a_out = np.copy(a)
     b_out = np.copy(b)
-    
+
     # Swap values
     a_out[swap_inds] = b[swap_inds]
     b_out[swap_inds] = a[swap_inds]
@@ -1088,10 +1088,10 @@ def _ks_stat(data1, data2):
     # Compute corresponding values of the theoretical CDF
     cdf = _ecdf_formal(x, data2)
 
-    # Compute distances between convex corners and CDF
+    # Compute distances between concave corners and CDF
     D_top = y - cdf
 
-    # Compute distance between concave corners and CDF
+    # Compute distance between convex corners and CDF
     D_bottom = cdf - y + 1/len(data1)
 
     return np.max(np.concatenate((D_top, D_bottom)))
