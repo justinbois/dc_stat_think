@@ -20,7 +20,8 @@ Upon importing the module, functions from the DataCamp Statistical Thinking cour
 ```python
 >>> import numpy as np
 >>> import dc_stat_think as dcst
->>> data = np.array([1.2, 3.3, 2.7, 2.4, 5.6, 3.4, 1.3, 3.9, 2.9, 2.1, 2.7])
+>>> data = np.array([1.2, 3.3, 2.7, 2.4, 5.6, 
+                     3.4, 1.3, 3.9, 2.9, 2.1, 2.7])
 >>> bs_reps = dcst.draw_bs_reps(data, np.mean, size=10000)
 >>> conf_int = np.percentile(bs_reps, [2.5, 97.5])
 >>> print(conf_int)
