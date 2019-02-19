@@ -4,7 +4,7 @@
 
 __author__ = """Justin Bois"""
 __email__ = 'bois@caltech.edu'
-__version__ = '1.0.0'
+__version__ = '1.0.1'
 
 
 from .dc_stat_think import *
