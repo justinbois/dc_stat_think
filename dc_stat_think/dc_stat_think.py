@@ -14,7 +14,6 @@ more efficient calculation.
 import numpy as np
 import numba
 
-
 def ecdf_formal(x, data):
     """
     Compute the values of the formal ECDF generated from `data` at x.
@@ -602,6 +601,8 @@ def draw_perm_reps(data_1, data_2, func, size=1, args=()):
         if func == diff_of_means:
             return _draw_perm_reps_diff_of_means(data_1, data_2, size=size)
         elif func == studentized_diff_of_means:
+            if len(data_1) == 1 or len(data_2) == 1:
+                raise RuntimeError('Data sets must have at least two entries')
             return _draw_perm_reps_studentized_diff_of_means(data_1, data_2,
                                                              size=size)
 
@@ -748,8 +749,8 @@ def studentized_diff_of_means(data_1, data_2):
     .. If the variance of both `data_1` and `data_2` is zero, returns
        np.nan.
     """
-    data_1 = _convert_data(data_1)
-    data_2 = _convert_data(data_2)
+    data_1 = _convert_data(data_1, min_len=2)
+    data_2 = _convert_data(data_2, min_len=2)
 
     return _studentized_diff_of_means(data_1, data_2)
 
@@ -776,12 +777,11 @@ def _studentized_diff_of_means(data_1, data_2):
     .. If the variance of both `data_1` and `data_2` is zero, returns
        np.nan.
     """
+    if _allequal(data_1) and _allequal(data_2):
+        return np.nan
 
     denom = np.sqrt(np.var(data_1) / (len(data_1) - 1)
                     + np.var(data_2) / (len(data_2) - 1))
-
-    if denom == 0.0:
-        return np.nan
 
     return (np.mean(data_1) - np.mean(data_2)) / denom
 
@@ -1379,7 +1379,7 @@ def _convert_two_data(x, y, inf_ok=False, min_len=1):
 
 
 @numba.jit(nopython=True)
-def _allequal(x, rtol=1e-5, atol=1e-14):
+def _allequal(x, rtol=1e-7, atol=1e-14):
     """
     Determine if all entries in an array are equal.
 
@@ -1403,7 +1403,7 @@ def _allequal(x, rtol=1e-5, atol=1e-14):
 
 
 @numba.jit(nopython=True)
-def _allclose(x, y, rtol=1e-5, atol=1e-14):
+def _allclose(x, y, rtol=1e-7, atol=1e-14):
     """
     Determine if all entries in two arrays are close to each other.
 

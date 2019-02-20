@@ -27,8 +27,10 @@ arrays = hnp.arrays(np.float, array_shapes, elements=hs.floats(-100, 100))
 arrays_2 = hnp.arrays(np.float, (2, 10), elements=hs.floats(-100, 100))
 
 # Tolerance on closeness of arrays
-atol = 1e-14
+atol = 1e-10
 
+
+@hypothesis.settings(deadline=None)
 @hypothesis.given(arrays, arrays)
 def test_ecdf_formal(x, data):
     correct = np.searchsorted(np.sort(data), x, side='right') / len(data)
@@ -55,6 +57,7 @@ def test_ecdf_formal_custom():
     assert np.allclose(correct, result, atol=atol)
 
 
+@hypothesis.settings(deadline=None)
 @hypothesis.given(arrays)
 def test_ecdf(data):
     x, y = dcst.ecdf(data)
@@ -63,6 +66,7 @@ def test_ecdf(data):
     assert np.allclose(y, y_correct, atol=atol, equal_nan=True)
 
 
+@hypothesis.settings(deadline=None)
 @hypothesis.given(arrays_2, hs.integers(0, 1000000))
 def test_swap_random(data, seed):
     a, b = data
@@ -102,6 +106,7 @@ def test_ecdf_formal_for_plotting():
     assert np.allclose(y, y_correct, atol=atol, equal_nan=True)
 
 
+@hypothesis.settings(deadline=None)
 @hypothesis.given(arrays, hs.integers(0, 1000000))
 def test_bootstrap_replicate_1d(data, seed):
     np.random.seed(seed)
@@ -132,6 +137,7 @@ def test_bootstrap_replicate_1d_nan():
     excinfo.match('Array must have at least 1 non-NaN entries.')
 
 
+@hypothesis.settings(deadline=None)
 @hypothesis.given(arrays, hs.integers(0, 1000000), hs.integers(1, 100))
 def test_draw_bs_reps(data, seed, size):
     np.random.seed(seed)
@@ -175,7 +181,7 @@ def test_draw_bs_pairs_linreg():
             np.random.seed(seed)
             slope_correct, intercept_correct = \
                                 original.draw_bs_pairs_linreg(x, y, size=size)
-            assert np.allclose(slope, slope_correct, atol=atol, 
+            assert np.allclose(slope, slope_correct, atol=atol,
                                equal_nan=True)
             assert np.allclose(intercept, intercept_correct, atol=atol, equal_nan=True)
 
@@ -215,6 +221,7 @@ def test_draw_bs_pairs_linreg_nan():
     excinfo.match('All entries in arrays must be finite.')
 
 
+@hypothesis.settings(deadline=None)
 @hypothesis.given(arrays_2, hs.integers(0, 1000000), hs.integers(1, 100))
 def test_draw_bs_pairs(data, seed, size):
     x, y = data
@@ -230,6 +237,7 @@ def test_draw_bs_pairs(data, seed, size):
     assert np.allclose(bs_reps, bs_reps_correct, atol=atol, equal_nan=True)
 
 
+@hypothesis.settings(deadline=None)
 @hypothesis.given(arrays, arrays, hs.integers(0, 1000000))
 def test_permutation_sample(data_1, data_2, seed):
     np.random.seed(seed)
@@ -244,6 +252,7 @@ def test_permutation_sample(data_1, data_2, seed):
                        np.sort(np.concatenate((x, y))), atol=atol, equal_nan=True)
 
 
+@hypothesis.settings(deadline=None)
 @hypothesis.given(arrays, arrays, hs.integers(0, 1000000))
 def test_draw_perm_reps(data_1, data_2, seed):
     # Have to use size=1 because np.random.shuffle and np.random.permutation
@@ -285,21 +294,25 @@ def test_draw_perm_reps(data_1, data_2, seed):
     assert np.allclose(x_correct, x, atol=atol, equal_nan=True)
 
 
+@hypothesis.settings(deadline=None)
 @hypothesis.given(arrays, arrays)
 def test_diff_of_means(data_1, data_2):
     assert np.allclose(dcst.diff_of_means(data_1, data_2),
                       np.mean(data_1) - np.mean(data_2), atol=atol, equal_nan=True)
 
 
+@hypothesis.settings(deadline=None)
 @hypothesis.given(arrays, arrays)
 def test_studentized_diff_of_means(data_1, data_2):
-    if np.var(data_1) == np.var(data_2) == 0:
+    if (np.allclose(data_1, data_1[0], rtol=1e-7, atol=1e-14)
+          and np.allclose(data_2, data_2[0], rtol=1e-7, atol=1e-14)):
         assert np.isnan(dcst.studentized_diff_of_means(data_1, data_2))
     else:
         t, _ = st.ttest_ind(data_1, data_2, equal_var=False)
         assert np.isclose(dcst.studentized_diff_of_means(data_1, data_2), t)
 
 
+@hypothesis.settings(deadline=None)
 @hypothesis.given(arrays_2)
 def test_pearson_r(data):
     x, y = data
@@ -336,6 +349,7 @@ def test_pearson_r_edge():
     excinfo.match('All entries in arrays must be finite.')
 
 
+@hypothesis.settings(deadline=None)
 @hypothesis.given(arrays)
 def test_ks_stat(x):
     theor_data = np.random.normal(0, 1, size=100)
@@ -351,12 +365,13 @@ def test_ks_stat(x):
     assert np.isclose(dcst.ks_stat(x, theor_data), correct)
 
 
+@hypothesis.settings(deadline=None)
 @hypothesis.given(arrays)
 def test_convert_data(data):
     assert np.allclose(data, dcst_private._convert_data(data), atol=atol)
 
     df = pd.DataFrame({'test': data})
-    assert np.allclose(data, dcst_private._convert_data(df.loc[:,'test']), 
+    assert np.allclose(data, dcst_private._convert_data(df.loc[:,'test']),
                        atol=atol)
     with pytest.raises(RuntimeError) as excinfo:
         dcst_private._convert_data(df)
@@ -366,6 +381,7 @@ def test_convert_data(data):
     assert np.allclose(data, dcst_private._convert_data(s), atol=atol)
 
 
+@hypothesis.settings(deadline=None)
 @hypothesis.given(hs.floats(-10, 10))
 def test_convert_data_scalar(data):
     conv_data = dcst_private._convert_data(data)
@@ -390,6 +406,7 @@ def test_convert_data_edge():
     assert np.allclose(x, x_correct, atol=atol)
 
 
+@hypothesis.settings(deadline=None)
 @hypothesis.given(arrays_2)
 def test_convert_two_data(data):
     x_correct, y_correct = data
@@ -456,6 +473,7 @@ def test_convert_two_data_edge():
     assert np.allclose(y, y_correct, atol=atol)
 
 
+@hypothesis.settings(deadline=None)
 @hypothesis.given(hs.integers(0, 1000000))
 def test_pandas_conversion(seed):
     df = pd.DataFrame({'a': [3, 2, 1, 4],
@@ -495,5 +513,5 @@ def test_pandas_conversion(seed):
     correct = dcst.draw_perm_reps(df['a'].values, df['b'].values,
                                   dcst.diff_of_means, size=100)
     dcst_private._seed_numba(seed)
-    assert np.allclose(dcst.draw_perm_reps(df['a'], df['b'], 
+    assert np.allclose(dcst.draw_perm_reps(df['a'], df['b'],
                        dcst.diff_of_means, size=100), correct, atol=atol)
