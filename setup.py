@@ -27,7 +27,7 @@ test_requirements = [
 
 setup(
     name='dc_stat_think',
-    version='1.0.1',
+    version='1.0.2',
     description="Utility functions used in the DataCamp Statistical Thinking courses.",
     long_description=readme + '\n\n' + history,
     author="Justin Bois",
