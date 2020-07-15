@@ -18,7 +18,7 @@ def ecdf(data):
     x = np.sort(data)
 
     # y-data for the ECDF
-    y = np.arange(1, n+1) / n
+    y = np.arange(1, n + 1) / n
 
     return x, y
 
@@ -29,7 +29,7 @@ def pearson_r(x, y):
     corr_mat = np.corrcoef(x, y)
 
     # Return entry [0,1]
-    return corr_mat[0,1]
+    return corr_mat[0, 1]
 
 
 def perform_bernoulli_trials(n, p):
@@ -106,8 +106,8 @@ def permutation_sample(data1, data2):
     permuted_data = np.random.permutation(data)
 
     # Split the permuted array into two
-    perm_sample_1 = permuted_data[:len(data1)]
-    perm_sample_2 = permuted_data[len(data1):]
+    perm_sample_1 = permuted_data[: len(data1)]
+    perm_sample_2 = permuted_data[len(data1) :]
 
     return perm_sample_1, perm_sample_2
 
@@ -153,11 +153,11 @@ def swap_random(a, b):
     """Randomly swap entries in two arrays."""
     # Indices to swap
     swap_inds = np.random.random(size=len(a)) < 0.5
-    
+
     # Make copies of arrays a and b for output
     a_out = np.copy(a)
     b_out = np.copy(b)
-    
+
     # Swap values
     a_out[swap_inds] = b[swap_inds]
     b_out[swap_inds] = a[swap_inds]
@@ -184,7 +184,7 @@ def b_value(mags, mt, perc=[2.5, 97.5], n_reps=None):
 
         # Compute confidence interval
         conf_int = np.percentile(b_bs_reps, perc)
-    
+
         return b, conf_int
 
 
@@ -197,4 +197,4 @@ def frac_yay_dems(dems, reps):
 def heritability(parents, offspring):
     """Compute the heritability from parent and offspring samples."""
     covariance_matrix = np.cov(parents, offspring)
-    return covariance_matrix[0,1] / covariance_matrix[0,0]
+    return covariance_matrix[0, 1] / covariance_matrix[0, 0]
