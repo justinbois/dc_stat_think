@@ -27,7 +27,7 @@ test_requirements = [
 
 setup(
     name='dc_stat_think',
-    version='1.1.0',
+    version='1.1.1',
     description="Utility functions used in the DataCamp Statistical Thinking courses.",
     long_description=readme,
     long_description_content_type="text/markdown",
@@ -49,6 +49,7 @@ setup(
         'Programming Language :: Python :: 3.5',
         'Programming Language :: Python :: 3.6',
         'Programming Language :: Python :: 3.7',
+        'Programming Language :: Python :: 3.8',
     ],
     test_suite='tests',
     tests_require=test_requirements,
