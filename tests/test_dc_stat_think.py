@@ -146,18 +146,21 @@ def test_draw_bs_reps(data, seed, size):
     x = no_numba.draw_bs_reps(data, np.mean, size=size)
     np.random.seed(seed)
     x_correct = original.draw_bs_reps(data[~np.isnan(data)], np.mean, size=size)
+    x_test_numba = dcst.draw_bs_reps(data, np.mean, size=size)
     assert np.allclose(x, x_correct, atol=atol, equal_nan=True)
 
     np.random.seed(seed)
     x = no_numba.draw_bs_reps(data, np.median, size=size)
     np.random.seed(seed)
     x_correct = original.draw_bs_reps(data[~np.isnan(data)], np.median, size=size)
+    x_test_numba = dcst.draw_bs_reps(data, np.median, size=size)
     assert np.allclose(x, x_correct, atol=atol, equal_nan=True)
 
     np.random.seed(seed)
     x = no_numba.draw_bs_reps(data, np.std, size=size)
     np.random.seed(seed)
     x_correct = original.draw_bs_reps(data[~np.isnan(data)], np.std, size=size)
+    x_test_numba = dcst.draw_bs_reps(data, np.std, size=size)
     assert np.allclose(x, x_correct, atol=atol, equal_nan=True)
 
     def my_fun(data):
@@ -167,6 +170,9 @@ def test_draw_bs_reps(data, seed, size):
     x = no_numba.draw_bs_reps(data, my_fun, size=size)
     np.random.seed(seed)
     x_correct = original.draw_bs_reps(data[~np.isnan(data)], my_fun, size=size)
+    x_test_numba = dcst.draw_bs_reps(data, my_fun, size=size)
+    _, numba_success = dcst_private._make_one_arg_numba_func(my_fun, ())
+    assert numba_success
     assert np.allclose(x, x_correct, atol=atol, equal_nan=True)
 
 
@@ -179,6 +185,11 @@ def test_draw_bs_reps_not_numbaable(data, seed, size):
     x_correct = original.draw_bs_reps(
         data[~np.isnan(data)], lambda x: np.sum(np.cbrt(np.abs(x))), size=size
     )
+    x_test_numba = dcst.draw_bs_reps(
+        data, lambda x: np.sum(np.cbrt(np.abs(x))), size=size
+    )
+    _, numba_success = dcst_private._make_one_arg_numba_func(lambda x: np.sum(np.cbrt(np.abs(x))), ())
+    assert not numba_success
     assert np.allclose(x, x_correct, atol=atol, equal_nan=True)
 
 
@@ -194,6 +205,9 @@ def test_draw_bs_pairs_linreg():
             slope, intercept = no_numba.draw_bs_pairs_linreg(x, y, size=size)
             np.random.seed(seed)
             slope_correct, intercept_correct = original.draw_bs_pairs_linreg(
+                x, y, size=size
+            )
+            slope_test_numba, intercept_test_numba = dcst.draw_bs_pairs_linreg(
                 x, y, size=size
             )
             assert np.allclose(slope, slope_correct, atol=atol, equal_nan=True)
@@ -249,6 +263,7 @@ def test_draw_bs_pairs(data, seed, size):
     bs_reps = no_numba.draw_bs_pairs(x, y, my_fun, args=(2.4,), size=size)
     np.random.seed(seed)
     bs_reps_correct = original.draw_bs_pairs(x, y, my_fun_orig, size=size)
+    bs_reps_test_numba = dcst.draw_bs_pairs(x, y, my_fun, args=(2.4,), size=size)
     assert np.allclose(bs_reps, bs_reps_correct, atol=atol, equal_nan=True)
 
 
@@ -259,6 +274,7 @@ def test_permutation_sample(data_1, data_2, seed):
     x, y = no_numba.permutation_sample(data_1, data_2)
     np.random.seed(seed)
     x_correct, y_correct = original.permutation_sample(data_1, data_2)
+    x_test_numba, y_test_numba = dcst.permutation_sample(data_1, data_2)
     assert np.allclose(x_correct, x, atol=atol, equal_nan=True)
     assert np.allclose(y_correct, y, atol=atol, equal_nan=True)
 
@@ -280,6 +296,7 @@ def test_draw_perm_reps(data_1, data_2, seed):
     x = no_numba.draw_perm_reps(data_1, data_2, no_numba.diff_of_means, size=1)
     np.random.seed(seed)
     x_correct = original.draw_perm_reps(data_1, data_2, original.diff_of_means, size=1)
+    x_test_numba = dcst.draw_perm_reps(data_1, data_2, dcst.diff_of_means, size=1)
     assert np.allclose(x_correct, x, atol=atol, equal_nan=True)
 
     np.random.seed(seed)
@@ -289,6 +306,9 @@ def test_draw_perm_reps(data_1, data_2, seed):
     np.random.seed(seed)
     x_correct = original.draw_perm_reps(
         data_1, data_2, no_numba.studentized_diff_of_means, size=1
+    )
+    x_test_numba = dcst.draw_perm_reps(
+        data_1, data_2, dcst.studentized_diff_of_means, size=1
     )
     assert np.allclose(x_correct, x, atol=atol, equal_nan=True)
 
@@ -302,6 +322,7 @@ def test_draw_perm_reps(data_1, data_2, seed):
     x = no_numba.draw_perm_reps(data_1, data_2, my_fun, args=(2.4,), size=1)
     np.random.seed(seed)
     x_correct = original.draw_perm_reps(data_1, data_2, my_fun_orig, size=1)
+    x_test_numba = dcst.draw_perm_reps(data_1, data_2, my_fun, args=(2.4,), size=1)
     assert np.allclose(x_correct, x, atol=atol, equal_nan=True)
 
     def diff_of_medians(data_1, data_2):
@@ -311,6 +332,7 @@ def test_draw_perm_reps(data_1, data_2, seed):
     x = no_numba.draw_perm_reps(data_1, data_2, diff_of_medians, size=1)
     np.random.seed(seed)
     x_correct = original.draw_perm_reps(data_1, data_2, diff_of_medians, size=1)
+    x_test_numba = dcst.draw_perm_reps(data_1, data_2, diff_of_medians, size=1)
     assert np.allclose(x_correct, x, atol=atol, equal_nan=True)
 
 

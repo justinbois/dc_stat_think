@@ -10,11 +10,42 @@ way to do things, and in almost all cases, it also has pedagogical
 benefits. However, in some cases, the scipy.stats module offers
 more efficient calculation.
 
-This submodule is identical to the main dc_stat_think submodule,
-except numba is not used here.
+This submodule is identical to the dc_stat_think submodule except:
+
+1. Every `@numba.jit(nopython=True)` decorator is commented out.
+2. The `_make_one_arg_numba_func()` and `_make_two_arg_numba_func()`
+   functions always return the input function and False, meaning that
+   there is no JITting of the input function.
+
+These changes shut down all JITting using Numba.
 """
 
 import numpy as np
+
+
+def _dummy_jit(*args, **kwargs):
+    """Dummy wrapper for jitting if numba not applicable."""
+
+    def wrapper(f):
+        return f
+
+    def marker(*args, **kwargs):
+        return marker
+
+    if (
+        len(args) > 0
+        and (args[0] is marker or not callable(args[0]))
+        or len(kwargs) > 0
+    ):
+        # @jit(int32(int32, int32)), @jit(signature="void(int32)")
+        return wrapper
+    elif len(args) == 0:
+        # @jit()
+        return wrapper
+    else:
+        # @jit
+        return args[0]
+
 
 def ecdf_formal(x, data):
     """
@@ -41,7 +72,7 @@ def ecdf_formal(x, data):
 
     # If x has any nans, raise a RuntimeError
     if np.isnan(x).any():
-        raise RuntimeError('Input cannot have NaNs.')
+        raise RuntimeError("Input cannot have NaNs.")
 
     # Convert x to array
     x = _convert_data(x, inf_ok=True)
@@ -121,14 +152,12 @@ def ecdf(data, formal=False, buff=0.1, min_x=None, max_x=None):
     .. nan entries in `data` are ignored.
     """
     if formal and buff is None and (min_x is None or max_x is None):
-        raise RunetimeError(
-                    'If `buff` is None, `min_x` and `max_x` must be specified.')
+        raise RunetimeError("If `buff` is None, `min_x` and `max_x` must be specified.")
 
     data = _convert_data(data)
 
     if formal:
-        return _ecdf_formal_for_plotting(data, buff=buff, min_x=min_x,
-                                         max_x=max_x)
+        return _ecdf_formal_for_plotting(data, buff=buff, min_x=min_x, max_x=max_x)
     else:
         return _ecdf_dots(data)
 
@@ -150,7 +179,7 @@ def _ecdf_dots(data):
     y : array
         `y` values for plotting
     """
-    return np.sort(data), np.arange(1, len(data)+1) / len(data)
+    return np.sort(data), np.arange(1, len(data) + 1) / len(data)
 
 
 # @numba.jit(nopython=True)
@@ -182,13 +211,13 @@ def _ecdf_formal_for_plotting(data, buff=0.1, min_x=None, max_x=None):
 
     # Set defaults for min and max tails
     if min_x is None:
-        min_x = x[0] - (x[-1] - x[0])*buff
+        min_x = x[0] - (x[-1] - x[0]) * buff
     if max_x is None:
-        max_x = x[-1] + (x[-1] - x[0])*buff
+        max_x = x[-1] + (x[-1] - x[0]) * buff
 
     # Set up output arrays
-    x_formal = np.empty(2*(len(x) + 1))
-    y_formal = np.empty(2*(len(x) + 1))
+    x_formal = np.empty(2 * (len(x) + 1))
+    y_formal = np.empty(2 * (len(x) + 1))
 
     # y-values for steps
     y_formal[:2] = 0
@@ -269,9 +298,14 @@ def draw_bs_reps(data, func, size=1, args=()):
             return _draw_bs_reps_std(data, size=size)
 
     # Make Numba'd function
-    f = _make_one_arg_numba_func(func)
+    f, numba_success = _make_one_arg_numba_func(func)
 
-    # @numba.jit
+    if numba_success:
+        jit = numba.jit
+    else:
+        jit = _dummy_jit
+
+    @jit(nopython=True)
     def _draw_bs_reps(data):
         # Set up output array
         bs_reps = np.empty(size)
@@ -451,7 +485,7 @@ def _draw_bs_pairs_linreg(x, y, size=1):
         # Construct and scale least squares problem
         A = np.stack((bs_x, np.ones(len(bs_x)))).transpose()
         A2 = A * A
-        scale = np.sqrt(np.array([np.sum(A2[:,0]), np.sum(A2[:,1])]))
+        scale = np.sqrt(np.array([np.sum(A2[:, 0]), np.sum(A2[:, 1])]))
         A /= scale
 
         # Solve
@@ -493,11 +527,16 @@ def draw_bs_pairs(x, y, func, size=1, args=()):
     x, y = _convert_two_data(x, y, min_len=1)
 
     # Make Numba'd function
-    f = _make_two_arg_numba_func(func)
+    f, numba_success = _make_two_arg_numba_func(func)
+
+    if numba_success:
+        jit = numba.jit
+    else:
+        jit = _dummy_jit
 
     n = len(x)
 
-    # @numba.jit
+    @jit(nopython=True)
     def _draw_bs_pairs(x, y):
         # Set up array of indices to sample from
         inds = np.arange(n)
@@ -567,7 +606,7 @@ def _permutation_sample(data_1, data_2):
     """
     x = np.concatenate((data_1, data_2))
     np.random.shuffle(x)
-    return x[:len(data_1)], x[len(data_1):]
+    return x[: len(data_1)], x[len(data_1) :]
 
 
 def draw_perm_reps(data_1, data_2, func, size=1, args=()):
@@ -604,14 +643,18 @@ def draw_perm_reps(data_1, data_2, func, size=1, args=()):
             return _draw_perm_reps_diff_of_means(data_1, data_2, size=size)
         elif func == studentized_diff_of_means:
             if len(data_1) == 1 or len(data_2) == 1:
-                raise RuntimeError('Data sets must have at least two entries')
-            return _draw_perm_reps_studentized_diff_of_means(data_1, data_2,
-                                                             size=size)
+                raise RuntimeError("Data sets must have at least two entries")
+            return _draw_perm_reps_studentized_diff_of_means(data_1, data_2, size=size)
 
     # Make a Numba'd function for drawing reps.
-    f = _make_two_arg_numba_func(func)
+    f, numba_success = _make_two_arg_numba_func(func)
 
-    # @numba.jit
+    if numba_success:
+        jit = numba.jit
+    else:
+        jit = _dummy_jit
+
+    @jit(nopython=True)
     def _draw_perm_reps(data_1, data_2):
         n1 = len(data_1)
         x = np.concatenate((data_1, data_2))
@@ -782,8 +825,9 @@ def _studentized_diff_of_means(data_1, data_2):
     if _allequal(data_1) and _allequal(data_2):
         return np.nan
 
-    denom = np.sqrt(np.var(data_1) / (len(data_1) - 1)
-                    + np.var(data_2) / (len(data_2) - 1))
+    denom = np.sqrt(
+        np.var(data_1) / (len(data_1) - 1) + np.var(data_2) / (len(data_2) - 1)
+    )
 
     return (np.mean(data_1) - np.mean(data_2)) / denom
 
@@ -842,7 +886,7 @@ def _pearson_r(x, y):
     if _allequal(x) or _allequal(y):
         return np.nan
 
-    return (np.mean(x*y) - np.mean(x) * np.mean(y)) / np.std(x) / np.std(y)
+    return (np.mean(x * y) - np.mean(x) * np.mean(y)) / np.std(x) / np.std(y)
 
 
 def b_value(mags, mt, perc=[2.5, 97.5], n_reps=None):
@@ -973,9 +1017,9 @@ def perform_bernoulli_trials(n, p):
        `np.random.binomial(n, p)`, which is far more efficient.
     """
     if type(n) != int or n <= 0:
-        raise RuntimeError('`n` must be a positive integer.')
+        raise RuntimeError("`n` must be a positive integer.")
     if type(p) != float or p < 0 or p > 1:
-        raise RuntimeError('`p` must be a float between 0 and 1.')
+        raise RuntimeError("`p` must be a float between 0 and 1.")
 
     # Initialize number of successes: n_success
     n_success = 0
@@ -1103,7 +1147,7 @@ def _ks_stat(data1, data2):
     D_top = y - cdf
 
     # Compute distance between convex corners and CDF
-    D_bottom = cdf - y + 1/len(data1)
+    D_bottom = cdf - y + 1 / len(data1)
 
     return np.max(np.concatenate((D_top, D_bottom)))
 
@@ -1255,7 +1299,7 @@ def frac_yay_dems(dems, reps):
         Fraction of Democrates who voted yay.
     """
     if dems.dtype != bool:
-        raise RuntimeError('`dems` must be array of bools.')
+        raise RuntimeError("`dems` must be array of bools.")
 
     return np.sum(dems) / len(dems)
 
@@ -1278,7 +1322,7 @@ def heritability(parents, offspring):
     """
     par, off = _convert_two_data(parents, offspring)
     covariance_matrix = np.cov(par, off)
-    return covariance_matrix[0,1] / covariance_matrix[0,0]
+    return covariance_matrix[0, 1] / covariance_matrix[0, 0]
 
 
 def _convert_data(data, inf_ok=False, min_len=1):
@@ -1309,18 +1353,20 @@ def _convert_data(data, inf_ok=False, min_len=1):
 
     # Make sure it is 1D
     if len(data.shape) != 1:
-        raise RuntimeError('Input must be a 1D array or Pandas series.')
+        raise RuntimeError("Input must be a 1D array or Pandas series.")
 
     # Remove NaNs
     data = data[~np.isnan(data)]
 
     # Check for infinite entries
     if not inf_ok and np.isinf(data).any():
-        raise RuntimeError('All entries must be finite.')
+        raise RuntimeError("All entries must be finite.")
 
     # Check to minimal length
     if len(data) < min_len:
-        raise RuntimeError('Array must have at least {0:d} non-NaN entries.'.format(min_len))
+        raise RuntimeError(
+            "Array must have at least {0:d} non-NaN entries.".format(min_len)
+        )
 
     return data
 
@@ -1350,7 +1396,7 @@ def _convert_two_data(x, y, inf_ok=False, min_len=1):
     """
     # Make sure they are array-like
     if np.isscalar(x) or np.isscalar(y):
-        raise RuntimeError('Arrays must be 1D arrays of the same length.')
+        raise RuntimeError("Arrays must be 1D arrays of the same length.")
 
     # Convert to Numpy arrays
     x = np.array(x, dtype=float)
@@ -1358,15 +1404,15 @@ def _convert_two_data(x, y, inf_ok=False, min_len=1):
 
     # Check for infinite entries
     if not inf_ok and (np.isinf(x).any() or np.isinf(y).any()):
-        raise RuntimeError('All entries in arrays must be finite.')
+        raise RuntimeError("All entries in arrays must be finite.")
 
     # Make sure they are 1D arrays
     if len(x.shape) != 1 or len(y.shape) != 1:
-        raise RuntimeError('Input must be a 1D array or Pandas series.')
+        raise RuntimeError("Input must be a 1D array or Pandas series.")
 
     # Must be the same length
     if len(x) != len(y):
-        raise RuntimeError('Arrays must be 1D arrays of the same length.')
+        raise RuntimeError("Arrays must be 1D arrays of the same length.")
 
     # Clean out nans
     inds = ~np.logical_or(np.isnan(x), np.isnan(y))
@@ -1375,7 +1421,9 @@ def _convert_two_data(x, y, inf_ok=False, min_len=1):
 
     # Check to minimal length
     if len(x) < min_len:
-        raise RuntimeError('Arrays must have at least {0:d} mutual non-NaN entries.'.format(min_len))
+        raise RuntimeError(
+            "Arrays must have at least {0:d} mutual non-NaN entries.".format(min_len)
+        )
 
     return x, y
 
@@ -1399,7 +1447,7 @@ def _allequal(x, rtol=1e-7, atol=1e-14):
         return True
 
     for a in x[1:]:
-        if np.abs(a-x[0]) > (atol + rtol * np.abs(a)):
+        if np.abs(a - x[0]) > (atol + rtol * np.abs(a)):
             return False
     return True
 
@@ -1423,15 +1471,15 @@ def _allclose(x, y, rtol=1e-7, atol=1e-14):
         False otherwise.
     """
     for a, b in zip(x, y):
-        if np.abs(a-b) > (atol + rtol * np.abs(b)):
+        if np.abs(a - b) > (atol + rtol * np.abs(b)):
             return False
     return True
 
 
 def _make_one_arg_numba_func(func):
     """
-    Make a Numba'd version of a function that takes one positional
-    argument.
+    This is a dummy version of the function for use with tests without
+    numba. Always returns the un-Numba'd oritginal function and False.
 
     Parameters
     ----------
@@ -1440,24 +1488,23 @@ def _make_one_arg_numba_func(func):
 
     Returns
     -------
-    output : Numba'd function
-        A Numba'd version of the functon
+    output : Numba'd function (or original function)
+        A Numba'd version of the function. If that is not possible,
+        returns the original function.
+    numba_success : bool
+        True is function was successfully jitted.
 
-    Notes
-    -----
-    .. If the function is Numba'able in nopython mode, it will compile
-       in that way. Otherwise, falls back to object mode.
     """
-    # @numba.jit
     def f(x, args=()):
         return func(x, *args)
-    return f
+
+    return f, False
 
 
 def _make_two_arg_numba_func(func):
     """
-    Make a Numba'd version of a function that takes two positional
-    arguments.
+    This is a dummy version of the function for use with tests without
+    numba. Always returns the un-Numba'd oritginal function and False.
 
     Parameters
     ----------
@@ -1466,58 +1513,13 @@ def _make_two_arg_numba_func(func):
 
     Returns
     -------
-    output : Numba'd function
-        A Numba'd version of the functon
-
-    Notes
-    -----
-    .. If the function is Numba'able in nopython mode, it will compile
-       in that way. Otherwise, falls back to object mode.
+    output : Numba'd function (or original function)
+        A Numba'd version of the function. If that is not possible,
+        returns the original function.
+    numba_success : bool
+        True is function was successfully jitted.
     """
-    # @numba.jit
     def f(x, y, args=()):
         return func(x, y, *args)
-    return f
 
-
-def _make_rng_numba_func(func):
-    """
-    Make a Numba'd version of a function to draw random numbers.
-
-    Parameters
-    ----------
-    func : function
-        Function with call signature `func(*args, size=1)`.
-
-    Returns
-    -------
-    output : Numba'd function
-        A Numba'd version of the functon
-
-    Notes
-    -----
-    .. If the function is Numba'able in nopython mode, it will compile
-       in that way. Otherwise, falls back to object mode.
-    """
-    # @numba.jit
-    def f(args, size=1):
-        all_args = args + (size,)
-        return func(*all_args)
-    return f
-
-
-# @numba.jit(nopython=True)
-def _seed_numba(seed):
-    """
-    Seed the random number generator for Numba'd functions.
-
-    Parameters
-    ----------
-    seed : int
-        Seed of the RNG.
-
-    Returns
-    -------
-    None
-    """
-    np.random.seed(seed)
+    return f, False

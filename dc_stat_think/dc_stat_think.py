@@ -290,7 +290,7 @@ def draw_bs_reps(data, func, size=1, args=()):
             return _draw_bs_reps_std(data, size=size)
 
     # Make Numba'd function
-    f, numba_success = _make_one_arg_numba_func(func)
+    f, numba_success = _make_one_arg_numba_func(func, args)
 
     if numba_success:
         jit = numba.jit
@@ -519,7 +519,7 @@ def draw_bs_pairs(x, y, func, size=1, args=()):
     x, y = _convert_two_data(x, y, min_len=1)
 
     # Make Numba'd function
-    f, numba_success = _make_two_arg_numba_func(func)
+    f, numba_success = _make_two_arg_numba_func(func, args)
 
     if numba_success:
         jit = numba.jit
@@ -639,7 +639,7 @@ def draw_perm_reps(data_1, data_2, func, size=1, args=()):
             return _draw_perm_reps_studentized_diff_of_means(data_1, data_2, size=size)
 
     # Make a Numba'd function for drawing reps.
-    f, numba_success = _make_two_arg_numba_func(func)
+    f, numba_success = _make_two_arg_numba_func(func, args)
 
     if numba_success:
         jit = numba.jit
@@ -1468,7 +1468,7 @@ def _allclose(x, y, rtol=1e-7, atol=1e-14):
     return True
 
 
-def _make_one_arg_numba_func(func):
+def _make_one_arg_numba_func(func, func_args):
     """
     Make a Numba'd version of a function that takes one positional
     argument.
@@ -1477,6 +1477,8 @@ def _make_one_arg_numba_func(func):
     ----------
     func : function
         Function with call signature `func(x, *args)`.
+    func_args : tuple
+        Tuple of args to use in testing a function call.
 
     Returns
     -------
@@ -1484,13 +1486,18 @@ def _make_one_arg_numba_func(func):
         A Numba'd version of the function. If that is not possible,
         returns the original function.
     numba_success : bool
-        True is function was successfully jitted.
+        True if function was successfully jitted.
 
     """
     try:
+        func_numba = numba.jit(func, nopython=True)
+
         @numba.jit(nopython=True)
         def f(x, args=()):
-            return func(x, *args)
+            return func_numba(x, *args)
+
+        # Attempt function call
+        _ = f(np.array([1., 2.]), func_args)
 
         return f, True
     except:
@@ -1500,7 +1507,7 @@ def _make_one_arg_numba_func(func):
         return f, False
 
 
-def _make_two_arg_numba_func(func):
+def _make_two_arg_numba_func(func, func_args):
     """
     Make a Numba'd version of a function that takes two positional
     arguments.
@@ -1509,6 +1516,8 @@ def _make_two_arg_numba_func(func):
     ----------
     func : function
         Function with call signature `func(x, y, *args)`.
+    func_args : tuple
+        Tuple of args to use in testing a function call.
 
     Returns
     -------
@@ -1516,12 +1525,17 @@ def _make_two_arg_numba_func(func):
         A Numba'd version of the function. If that is not possible,
         returns the original function.
     numba_success : bool
-        True is function was successfully jitted.
+        True if function was successfully jitted.
     """
     try:
+        func_numba = numba.jit(func, nopython=True)
+
         @numba.jit(nopython=True)
-        def f(x, y, args=()):
-            return func(x, y, *args)
+        def f(x, args=()):
+            return func_numba(x, *args)
+
+        # Attempt function call
+        _ = f(np.array([1., 2.]), np.array([1., 2.]), func_args)
 
         return f, True
     except:
