@@ -144,7 +144,7 @@ def ecdf(data, formal=False, buff=0.1, min_x=None, max_x=None):
     .. nan entries in `data` are ignored.
     """
     if formal and buff is None and (min_x is None or max_x is None):
-        raise RunetimeError("If `buff` is None, `min_x` and `max_x` must be specified.")
+        raise RuntimeError("If `buff` is None, `min_x` and `max_x` must be specified.")
 
     data = _convert_data(data)
 
