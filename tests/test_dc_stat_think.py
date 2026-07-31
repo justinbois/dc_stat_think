@@ -21,10 +21,10 @@ import dc_stat_think.no_numba as no_numba
 
 # 1D arrays for testing functions outside of edge cases
 array_shapes = hnp.array_shapes(min_dims=1, max_dims=1, min_side=2, max_side=10)
-arrays = hnp.arrays(np.float, array_shapes, elements=hs.floats(-100, 100))
+arrays = hnp.arrays(float, array_shapes, elements=hs.floats(-100, 100))
 
 # 2D arrays for testing functions with two equal length input arrays
-arrays_2 = hnp.arrays(np.float, (2, 10), elements=hs.floats(-100, 100))
+arrays_2 = hnp.arrays(float, (2, 10), elements=hs.floats(-100, 100))
 
 # Tolerance on closeness of arrays
 atol = 1e-10
