@@ -1,0 +1,83 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "dc_stat_think"
+dynamic = ["version"]
+description = "Utility functions used in the DataCamp Statistical Thinking courses."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Justin Bois", email = "bois@caltech.edu" }]
+requires-python = ">=3.10"
+keywords = ["dc_stat_think", "statistics", "bootstrap", "datacamp"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Education",
+    "Natural Language :: English",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Mathematics",
+]
+dependencies = ["numpy>=1.24", "numba>=0.57"]
+
+[project.urls]
+Homepage = "https://github.com/justinbois/dc_stat_think"
+Source = "https://github.com/justinbois/dc_stat_think"
+Issues = "https://github.com/justinbois/dc_stat_think/issues"
+
+[dependency-groups]
+test = ["pytest>=7", "hypothesis>=6", "pandas>=2", "scipy>=1.10"]
+
+[tool.hatch.version]
+path = "dc_stat_think/__init__.py"
+
+[tool.hatch.build.targets.sdist]
+include = ["dc_stat_think/", "tests/", "README.md", "HISTORY.rst", "AUTHORS.rst", "LICENSE"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["dc_stat_think"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+# ---------------------------------------------------------------------------
+# pixi
+# ---------------------------------------------------------------------------
+
+[tool.pixi.workspace]
+channels = ["conda-forge"]
+platforms = ["osx-arm64", "osx-64", "linux-64", "linux-aarch64", "win-64"]
+
+[tool.pixi.dependencies]
+python = ">=3.10"
+numpy = ">=1.24"
+numba = ">=0.57"
+
+[tool.pixi.pypi-dependencies]
+dc_stat_think = { path = ".", editable = true }
+
+[tool.pixi.feature.test.dependencies]
+pytest = ">=7"
+hypothesis = ">=6"
+pandas = ">=2"
+scipy = ">=1.10"
+
+[tool.pixi.feature.build.dependencies]
+hatch = "*"
+
+[tool.pixi.feature.test.tasks]
+test = "pytest"
+
+[tool.pixi.feature.build.tasks]
+build = "hatch build"
+clean = { cmd = "rm -rf build dist .eggs *.egg-info .pytest_cache" }
+
+[tool.pixi.environments]
+default = { features = ["test"], solve-group = "default" }
+build = { features = ["build"], solve-group = "default" }
