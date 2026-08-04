@@ -30,6 +30,26 @@ arrays_2 = hnp.arrays(float, (2, 10), elements=hs.floats(-100, 100))
 atol = 1e-10
 
 
+class _PurePythonScale(object):
+    """Pure Python class; Numba cannot type instances of it."""
+
+    def __init__(self, value):
+        self.value = value
+
+
+_scale = _PurePythonScale(1.0)
+
+
+def not_numbaable(data):
+    """A function Numba cannot compile in nopython mode.
+
+    It closes over an instance of a pure Python class. Relying on an
+    unsupported Numpy function instead is not durable, since Numba's
+    coverage of Numpy grows with each release.
+    """
+    return _scale.value * np.sum(np.abs(data))
+
+
 @hypothesis.settings(deadline=None)
 @hypothesis.given(arrays, arrays)
 def test_ecdf_formal(x, data):
@@ -180,15 +200,13 @@ def test_draw_bs_reps(data, seed, size):
 @hypothesis.given(arrays, hs.integers(0, 1000000), hs.integers(1, 100))
 def test_draw_bs_reps_not_numbaable(data, seed, size):
     np.random.seed(seed)
-    x = no_numba.draw_bs_reps(data, lambda x: np.sum(np.cbrt(np.abs(x))), size=size)
+    x = no_numba.draw_bs_reps(data, not_numbaable, size=size)
     np.random.seed(seed)
     x_correct = original.draw_bs_reps(
-        data[~np.isnan(data)], lambda x: np.sum(np.cbrt(np.abs(x))), size=size
+        data[~np.isnan(data)], not_numbaable, size=size
     )
-    x_test_numba = dcst.draw_bs_reps(
-        data, lambda x: np.sum(np.cbrt(np.abs(x))), size=size
-    )
-    _, numba_success = dcst_private._make_one_arg_numba_func(lambda x: np.sum(np.cbrt(np.abs(x))), ())
+    x_test_numba = dcst.draw_bs_reps(data, not_numbaable, size=size)
+    _, numba_success = dcst_private._make_one_arg_numba_func(not_numbaable, ())
     assert not numba_success
     assert np.allclose(x, x_correct, atol=atol, equal_nan=True)
 
