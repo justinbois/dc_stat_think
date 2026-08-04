@@ -70,12 +70,21 @@ scipy = ">=1.10"
 
 [tool.pixi.feature.build.dependencies]
 hatch = "*"
+twine = "*"
 
 [tool.pixi.feature.test.tasks]
 test = "pytest"
 
 [tool.pixi.feature.build.tasks]
-build = "hatch build"
+# `--clean` wipes dist/ first, so a release never picks up stale artifacts.
+build = "hatch build --clean"
+check = { cmd = "twine check --strict dist/*", depends-on = ["build"] }
+# Credentials come from ~/.pypirc, or from TWINE_USERNAME=__token__ and
+# TWINE_PASSWORD=<API token> in the environment.
+publish-test = { cmd = "twine upload --repository testpypi dist/*", depends-on = [
+    "check",
+] }
+publish = { cmd = "twine upload dist/*", depends-on = ["check"] }
 clean = { cmd = "rm -rf build dist .eggs *.egg-info .pytest_cache" }
 
 [tool.pixi.environments]

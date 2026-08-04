@@ -50,10 +50,13 @@ clean-test: ## remove test and coverage artifacts
 test: ## run tests in the pixi default environment
 	pixi run test
 
-release: clean dist ## upload a release to PyPI
-	pixi run -e build hatch publish
+release: ## build, check, and upload a release to PyPI
+	pixi run -e build publish
 
-dist: clean ## build source and wheel packages
+release-test: ## build, check, and upload a release to TestPyPI
+	pixi run -e build publish-test
+
+dist: ## build source and wheel packages
 	pixi run -e build build
 	ls -l dist
 
