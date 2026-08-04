@@ -12,3 +12,9 @@ History
 1.0.2 (2019-02-20)
 1.1.0 (2020-07-14)
 ------------------
+
+1.1.2 (2026-07-31)
+------------------
+* Replace removed ``np.float`` alias with the builtin ``float`` in
+  ``_convert_data`` (both ``dc_stat_think`` and ``no_numba``). Restores
+  compatibility with NumPy >= 1.24, where ``np.float`` was removed.
