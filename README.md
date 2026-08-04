@@ -49,3 +49,5 @@ If you do want to use functions *exactly* as written in the Statistical Thinking
 
 ## Credits
 This package was created with [Cookiecutter](https://github.com/audreyr/cookiecutter) and the [audreyr/cookiecutter-pypackage](https://github.com/audreyr/cookiecutter-pypackage) project template and then modified.
+
+Portions of the package management system (like pyproject.toml) were written with the help of Claude Opus 4.8.
